@@ -57,7 +57,7 @@ class TorsoMotion:
         breath=4.*np.sin(2*np.pi*t/3.6);field=self.neck*self.safe
         dy=np.clip(breath+.65*accent,-5,5)*field;dx=np.clip((self.xx-w*.5)*.0007*np.sin(2*np.pi*t/3.6)+.30*accent,-3,3)*field
         if np.max(np.abs(dy)+np.abs(dx))<1e-5:return self.base
-        mx=self.xx-dx;my=self.yy-dy;a=cv2.remap(self.alpha,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
+        mx=(self.xx-dx).astype(np.float32);my=(self.yy-dy).astype(np.float32);a=cv2.remap(self.alpha,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
         prem=cv2.remap(self.base.astype(np.float32)*self.alpha[:,:,None],mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
         composed=prem+self.background*(1-a[:,:,None]);effect=np.clip(np.abs(dy)+np.abs(dx),0,1)
         union=(self.alpha>.001)|(a>.001);effect*=union

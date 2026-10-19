@@ -116,7 +116,7 @@ def animate_eye(frame, box, t, gaze, blink=True, profile='bezier', brow=False, s
         y0=max(0,y1-round(eh*2.0));yend=max(y0+1,y1-round(eh*.65));region=out[y0:yend,left:right].copy()
         by,bx=np.mgrid[:region.shape[0],:region.shape[1]].astype(np.float32)
         weight=np.sin(np.pi*(by+.5)/region.shape[0])**2*np.sin(np.pi*(bx+.5)/region.shape[1])**2
-        out[y0:yend,left:right]=cv2.remap(region,bx,by-1.5*close*weight,cv2.INTER_CUBIC,borderMode=cv2.BORDER_REFLECT_101)
+        out[y0:yend,left:right]=cv2.remap(region,np.asarray(bx,np.float32),np.asarray(by-1.5*close*weight,np.float32),cv2.INTER_CUBIC,borderMode=cv2.BORDER_REFLECT_101)
     if shadow and close:out=lid_shadow(out,box,close/.78)
     return out
 
@@ -150,5 +150,5 @@ def photo_motion(frame, face, t, eyes=(), gaze=False, micro=False, blink=True, m
             field=np.exp(-(((xx-cx)/(bw*w*.9))**2+((yy-cy)/(bh*h*1.5))**2)*2)
             dx=.002*w*math.sin(t*1.25)*field
             dy=.002*h*(math.sin(t*1.7)+.25*math.sin(t*.61))*field
-        out=cv2.remap(out,xx-dx,yy-dy,cv2.INTER_CUBIC,borderMode=cv2.BORDER_REFLECT_101)
+        out=cv2.remap(out,np.asarray(xx-dx,np.float32),np.asarray(yy-dy,np.float32),cv2.INTER_CUBIC,borderMode=cv2.BORDER_REFLECT_101)
     return out
