@@ -64,7 +64,15 @@ jobs:
         run: python ci/build_runtime.py
       - name: One synthetic frame only, no model weights
         shell: pwsh
-        run: .build/portable-runtime/base/python/python.exe -I tests/smoke_single_frame.py --output dist/Single_frame_smoke.json
+        run: |
+          $out = & .build/portable-runtime/base/python/python.exe -I tests/smoke_single_frame.py --output dist/Single_frame_smoke.json 2>&1 | ForEach-Object { "$_" }
+          $code = $LASTEXITCODE
+          $out | ForEach-Object { Write-Host $_ }
+          if ($code -ne 0) {
+            $tail = ($out | Select-Object -Last 25) -join '%0A'
+            Write-Host "::error title=Single frame smoke failed::$tail"
+            throw "Single frame smoke failed ($code)"
+          }
       - name: Integrate one portable folder and ZIP
         shell: pwsh
         run: python ci/package.py
