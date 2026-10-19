@@ -1,0 +1,96 @@
+name: Build Windows Go + Embedded Python
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      mask_review_approved:
+        description: Phase 1 mask reviewed and explicitly approved for EXE build
+        type: boolean
+        default: false
+      pyinstaller_launcher:
+        description: Also build optional PyInstaller wrapper
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  windows:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mask_review_approved == true }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+      - name: Source checkpoint BEFORE build or tests
+        shell: pwsh
+        run: python ci/checkpoint.py
+      - name: Download source and builder immediately
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: Source-and-GitHub-Builder
+          path: dist-source/*.zip
+          if-no-files-found: error
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Build native Windows GUI
+        shell: pwsh
+        run: ./build.ps1
+      - name: Lightweight native-crash recovery regression
+        shell: pwsh
+        run: |
+          python tests/test_native_retry.py
+          if ($LASTEXITCODE -ne 0) { throw 'Worker retry regression failed' }
+          go test -run 'TestWorkerBudgetPolicy|TestErrorReportAllowlistAndBound|TestV08Options' -count=1 .
+          if ($LASTEXITCODE -ne 0) { throw 'Budget/report regression failed' }
+      - name: Native EXE headless self-check
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist-native,dist | Out-Null
+          Copy-Item JunbaTalkVideo.exe dist-native/JunbaTalkVideo.exe
+          $report = Join-Path $PWD 'dist/Windows_native_smoke.json'
+          $p = Start-Process -FilePath (Join-Path $PWD 'JunbaTalkVideo.exe') -ArgumentList ('--self-test-report "' + $report + '"') -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'EXE self-test failed' }
+          if (-not (Get-Content $report -Raw | ConvertFrom-Json).ok) { throw 'Missing self-test success' }
+      - name: Build isolated Python + OpenVINO + DirectML submodule
+        shell: pwsh
+        run: python ci/build_runtime.py
+      - name: One synthetic frame only, no model weights
+        shell: pwsh
+        run: .build/portable-runtime/base/python/python.exe -I tests/smoke_single_frame.py --output dist/Single_frame_smoke.json
+      - name: Integrate one portable folder and ZIP
+        shell: pwsh
+        run: python ci/package.py
+      - name: Optional PyInstaller wrapper
+        if: github.event_name == 'workflow_dispatch' && inputs.pyinstaller_launcher
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Install failed' }
+          python -m PyInstaller --noconfirm JunbaTalkVideo.spec
+          if ($LASTEXITCODE -ne 0) { throw 'Wrapper build failed' }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: JunbaTalkVideo_v0.8.3_EmbeddedPortable.zip
+          path: dist/JunbaTalkVideo_v0.8.3_EmbeddedPortable.zip
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: JunbaTalkVideo_v0.8.3.exe
+          path: dist/JunbaTalkVideo_v0.8.3.exe
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: Windows-validation-and-small-portable
+          path: |
+            dist/*.json
+            dist/JunbaTalkVideo_v0.8.3_Windows64.zip
+            dist/JunbaTalkVideo_PyInstaller.exe
+          if-no-files-found: warn

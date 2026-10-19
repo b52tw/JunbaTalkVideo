@@ -1,0 +1,3 @@
+# Optional Windows PyInstaller wrapper build; application itself is Go.
+# Model runtimes: local/requirements.txt + hash-pinned wheel manifests.
+PyInstaller==6.22.3

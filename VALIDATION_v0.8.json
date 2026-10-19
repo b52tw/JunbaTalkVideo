@@ -1,0 +1,136 @@
+{
+  "version": "0.8.1-engineering-test",
+  "date": "2026-10-19",
+  "source_first_checkpoints": "R1/R2/R3/R4 Source and Builder saved before each new check; R4 downloaded back with exact SHA256 and CRC",
+  "cloud_scope": "syntax, Go Windows cross compilation, UI DOM, one synthetic source frame, 214-byte Conv+ReLU per CPU backend, fake subprocess retry; no real model weights or long video",
+  "single_frame_smoke": {
+    "ok": true,
+    "real_model_weights_loaded": false,
+    "synthetic_frames": 1,
+    "checks": {
+      "feather_outside_unchanged": true,
+      "poisson_outside_unchanged": true,
+      "shadow_bounded": true,
+      "blink_single_frame": true,
+      "torso_head_and_canvas_locked": true,
+      "micro_graph_bytes": 214,
+      "openvino": {
+        "smoke_conv_relu": [
+          "CPU"
+        ]
+      },
+      "ort_cpu": {
+        "smoke_conv_relu": [
+          "CPUExecutionProvider (2 節點)"
+        ]
+      },
+      "short_dummy_audio_damping": true
+    }
+  },
+  "fake_subprocess_retry": {
+    "ok": true,
+    "real_model_weights_loaded": false,
+    "frames_rendered": 0,
+    "subprocess_cpu_retry_sequential": true,
+    "npu_disabled_on_cpu": true,
+    "stdout": "{\"stage\": \"fallback\", \"message\": \"\\u524d\\u4e00\\u7a0b\\u5e8f\\u5df2\\u9000\\u51fa\\uff1b\\u65b0\\u7a0b\\u5e8f CPU \\u91cd\\u8a66 renderer.py\", \"attempt\": 1}\n"
+  },
+  "hardware_enumeration": {
+    "time": 1792378021.6639159,
+    "micro_only": true,
+    "real_weights_loaded": false,
+    "backends": [
+      {
+        "backend": "openvino",
+        "available": true,
+        "devices": [
+          {
+            "id": "CPU",
+            "name": "INTEL(R) XEON(R) PLATINUM 8573C"
+          }
+        ],
+        "providers": [],
+        "checks": [],
+        "version": "2026.4.1-22982-e213a147257-releases/2026/4",
+        "peak_mib": 84.3
+      },
+      {
+        "backend": "ort",
+        "available": true,
+        "devices": [],
+        "providers": [
+          "AzureExecutionProvider",
+          "CPUExecutionProvider"
+        ],
+        "checks": [],
+        "version": "1.24.4",
+        "peak_mib": 44.2
+      }
+    ],
+    "files": [],
+    "memory_target_mib": 200,
+    "cpu_verified": false,
+    "recommended": null,
+    "message": "已列出可用裝置；僅微型圖可證明 DLL／算子可用。未載入真實模型。"
+  },
+  "other_checks": {
+    "python_spec_json_syntax": "passed",
+    "github_actionlint": "passed",
+    "go_windows_amd64_cgo0": "passed",
+    "ui_jsdom": "passed"
+  },
+  "memory_limits": {
+    "worker_family_private_commit_mib_default": 3072,
+    "audit_private_commit_mib": 200,
+    "enforcement": "Windows Job Object, compiled but not executed here",
+    "does_not_bound": [
+      "physical RSS",
+      "memory-mapped file pages",
+      "GPU/shared driver memory",
+      "whole-system RAM"
+    ],
+    "actual_full_model_under_3gib_verified": false
+  },
+  "isolation": "export/cache/keypoint/audio/inference/detail stages are distinct awaited subprocesses; accelerator failure exits 75 before new CPU worker; fake restart order verified",
+  "fp16": "OpenVINO IR and detail cache weights compressed; CPU computation may be FP32; whole-process RAM is not guaranteed to halve",
+  "portable_build": "Go GUI + Embedded Python/OpenVINO/ORT DirectML SDK integrated by supplied windows-latest workflow; not executed in this environment",
+  "not_tested": [
+    "native Windows execution",
+    "Intel GPU/NPU",
+    "complete SadTalker/MuseTalk",
+    "real GFPGAN/RealESRGAN",
+    "long videos",
+    "real-person/cartoon quality of new Lab/shadow/GrabCut motion"
+  ],
+  "motion_transfer": "first-stage 2D torso/audio damping implemented; reference-video pose/gesture generation and full-body occlusion handling remain roadmap work",
+  "claims_not_made": [
+    "100% Windows compatibility",
+    "photorealistic teeth or eyelid texture",
+    "all models under 3 GiB",
+    "full gesture transfer complete"
+  ],
+  "v082_patch": {
+    "status": "lightweight checks passed; final handoff gate requires final syntax/build check",
+    "issues": [
+      "native GPU exit bypassed CPU fallback",
+      "3072 MiB default too strict on user machine",
+      "omitempty local_eta showed undefined"
+    ],
+    "budget": "auto 4096–6144 MiB; manual 2560/3072/4096/5120/6144",
+    "handoff": "child.wait() (Windows WaitForSingleObject), then 1 second before retry",
+    "scope": "light syntax/build, fake-process failure regression, single synthetic frame only",
+    "not_verified": [
+      "Windows native driver crash reproduction",
+      "full real neural inference",
+      "Intel GPU/NPU peak/quality",
+      "guaranteed video success or <=3 GiB RSS"
+    ],
+    "passed": [
+      "4 fake-process native/requested fallback, bounded CPU failure and bad-input regressions",
+      "Go adaptive budget / numeric ETA JSON / bounded allowlisted ZIP report checks",
+      "DOM missing ETA default and automatic budget",
+      "one synthetic source frame, 214-byte Conv+ReLU OpenVINO CPU / ORT CPU"
+    ],
+    "start_gate": "SDK child cannot start until Go successfully attaches Windows memory job"
+  }
+}

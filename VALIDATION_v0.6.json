@@ -1,0 +1,45 @@
+{
+  "version": "0.6.0",
+  "date": "2026-10-18",
+  "platform": "Linux CPU; OpenVINO 2026.4.1; Python 3.12 validation; Windows EXE uses existing Python 3.11 embedded runtime",
+  "tests": {
+    "go_race_suite": "PASS, including real 98-point detection API and fake external CLI plus actual FFmpeg export",
+    "python_composition": "3 PASS",
+    "python_face_geometry": "3 PASS",
+    "python_isolated_workers": "3 PASS; Chinese/spaces paths, unrelated cwd, no-face rejection and five body modes",
+    "ui_dom": "PASS; 98-point auto localization into generate payload, defaults, locking and mutually exclusive detail modes"
+  },
+  "actual_neural_test": {
+    "base": "existing MuseTalk ONNX, unchanged 256x256 face model",
+    "source": "first original-hold frame extracted from user supplied Junba_Video (2).mp4; not raw source photograph",
+    "audio": "same upload, offset 0.56 s, 1.5 s duration",
+    "talking_frames": 38,
+    "fps": 25,
+    "output": [
+      864,
+      1184
+    ],
+    "duration": "2.640000",
+    "video_codec": "h264",
+    "changes": "automatic face/eye/lip localization, no 2D deformation, no restoration",
+    "observation": "mouth area tearing reduced and teeth/lips more distinguishable; not a blind metric or controlled single-variable test",
+    "limitations": "full 19-second rerender not performed; Intel GPU/NPU and native Windows not tested this revision"
+  },
+  "detection": {
+    "real": "98 landmarks; detector score about 0.957, not lip-sync accuracy",
+    "cartoon": "98-point eye estimates inconsistent, explicit 5-point estimated fallback, human review required; not proof of accurate cartoon landmarks",
+    "memory_peak_mib_real_face_worker": 289.5
+  },
+  "musetalk_process_peaks_mib": {
+    "audio": 351.9,
+    "encode": 504.2,
+    "infer": 6990.8,
+    "decode": 666.6,
+    "compose": 85.5
+  },
+  "external_engines": {
+    "sadtalker": "adapter/process tests only, not neural quality; separately installed Python and weights required",
+    "latentsync": "argument and compatibility checks only, no CUDA neural run; 1.6 native 512, requires CUDA and conservatively 18 GiB VRAM"
+  },
+  "online": "official links and pricing checked only, no service upload or generation attempted"
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "name": "sr_anime.onnx",
+    "size": 9031567,
+    "sha256": "1777c7dffecdf356c234e3387d456a196ed9b72f9f14ed96bc097b9798b7ddbf",
+    "url": "https://huggingface.co/skillsafe-ai/realesrgan-x4plus-anime-6b/resolve/c001be50fae1c7a2bae8b2b4dec5e6fcbdbcca96/model_fp16.onnx"
+  }
+]

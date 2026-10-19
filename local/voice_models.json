@@ -1,0 +1,14 @@
+[
+  {
+    "name": "tone_converter.onnx",
+    "size": 128051288,
+    "sha256": "7d7ee834c230037ead5cd6b64d44fcd842fbab5cd4cf6fe3ab381fad763325e9",
+    "url": "https://huggingface.co/TigreGotico/voiceclonnx-openvoice-v2/resolve/34d010c192c97f763207f488f6057fd07fee42ad/tone_converter.onnx"
+  },
+  {
+    "name": "tone_ref_encoder.onnx",
+    "size": 3259275,
+    "sha256": "3dd4918cab90e1acf7fa5c6f7539c27710e7a3cdfba550468c5ea49399178bf7",
+    "url": "https://huggingface.co/TigreGotico/voiceclonnx-openvoice-v2/resolve/34d010c192c97f763207f488f6057fd07fee42ad/tone_ref_encoder.onnx"
+  }
+]

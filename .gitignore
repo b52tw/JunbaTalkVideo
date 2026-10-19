@@ -1,0 +1,9 @@
+.build/
+dist/
+dist-native/
+build/
+__pycache__/
+*.pyc
+*.exe
+tools/*.gz
+fonts/*.gz

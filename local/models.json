@@ -1,0 +1,32 @@
+[
+  {
+    "name": "positional_encoding_fp16.onnx",
+    "size": 3841148,
+    "sha256": "c2c72438aaa2f4478a4e62f3886741d51cb45cd2db67d752306cc90a74e68685",
+    "url": "https://huggingface.co/DgDev91/MuseTalk-ONNX/resolve/79550fb510b18ea14e425a1ddf8d99693fb5cdc8/positional_encoding_fp16.onnx"
+  },
+  {
+    "name": "unet_fp16.onnx",
+    "size": 1644748670,
+    "sha256": "7651ff47ea3873967b5717843daa668172781d6c0922cce9f70a7deac3d7e36b",
+    "url": "https://huggingface.co/DgDev91/MuseTalk-ONNX/resolve/79550fb510b18ea14e425a1ddf8d99693fb5cdc8/unet_fp16.onnx"
+  },
+  {
+    "name": "vae_decoder_fp16.onnx",
+    "size": 99082054,
+    "sha256": "cba213d86d4390ab167ee42940984b51a1591d343b52875ea795a932a4478b2b",
+    "url": "https://huggingface.co/DgDev91/MuseTalk-ONNX/resolve/79550fb510b18ea14e425a1ddf8d99693fb5cdc8/vae_decoder_fp16.onnx"
+  },
+  {
+    "name": "vae_encoder_fp16.onnx",
+    "size": 68404864,
+    "sha256": "a0fb212df8a408e162a2c9be15fd653e4c3f707333718975919f443233908e36",
+    "url": "https://huggingface.co/DgDev91/MuseTalk-ONNX/resolve/79550fb510b18ea14e425a1ddf8d99693fb5cdc8/vae_encoder_fp16.onnx"
+  },
+  {
+    "name": "whisper_encoder_fp16.onnx",
+    "size": 16462999,
+    "sha256": "7631e7be60391b08dca27090ab0512a0179559686daaf072aab3935b870a6b92",
+    "url": "https://huggingface.co/DgDev91/MuseTalk-ONNX/resolve/79550fb510b18ea14e425a1ddf8d99693fb5cdc8/whisper_encoder_fp16.onnx"
+  }
+]

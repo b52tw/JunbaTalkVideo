@@ -1,0 +1,14 @@
+[
+  {
+    "name": "landmarks98.xml",
+    "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/facial-landmarks-98-detection-0001/FP16/facial-landmarks-98-detection-0001.xml",
+    "size": 1539910,
+    "sha256": "515baa7a98e2cf11e6eed9a1c7ad9cb97c8f993c8741e586050effeefa79b0f6"
+  },
+  {
+    "name": "landmarks98.bin",
+    "url": "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/facial-landmarks-98-detection-0001/FP16/facial-landmarks-98-detection-0001.bin",
+    "size": 19290100,
+    "sha256": "413dd7d16b735983483ecc077c5b2175bf716f95bdb7f99e75726c5e79cc8b9d"
+  }
+]

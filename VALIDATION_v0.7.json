@@ -1,0 +1,81 @@
+{
+  "version": "0.7.0",
+  "date": "2026-10-18",
+  "platform": "Linux x86_64; Windows x64 cross compilation",
+  "native_windows_tested": false,
+  "intel_gpu_npu_tested": false,
+  "nvidia_tested": false,
+  "formats_actual_ffmpeg_audio_video": [
+    "MP4",
+    "WMV",
+    "MOV",
+    "MKV",
+    "WebM",
+    "AVI",
+    "M4V"
+  ],
+  "gif_silent_tested": true,
+  "regression": {
+    "go_race": "passed",
+    "python_geometry_composition_isolation": "10 passed",
+    "ui_jsdom": "passed",
+    "windows_wheel_dependency_closure": "72 wheels, actual downloaded bytes/sha256 and Windows markers checked; includes colorama",
+    "installer_lock": "stale file recovery and concurrent lock exclusion passed"
+  },
+  "musetalk_memory_comparison": {
+    "input": "identical two-frame latent/feature fixture; CPU two threads",
+    "old_onnx_peak_mib": 6936.5,
+    "ir_peak_mib": 5403.5,
+    "ir_build_peak_mib": 3250.4,
+    "reduction_percent": 22.1,
+    "output_max_absolute_difference": 0.0,
+    "includes": "one process CPU RAM, not whole-system/GPU memory"
+  },
+  "sadtalker_real_test": {
+    "input": "first frame of newly provided real-person clip and 1.2 sec of its audio",
+    "frames": 30,
+    "fps": 25,
+    "resolution": [
+      864,
+      1184
+    ],
+    "source_preparation_peak_mib": 1032.9,
+    "audio_motion_peak_mib": 589.7,
+    "render_peak_mib": 3451.4,
+    "render_seconds_approx": 575,
+    "render_cpu_threads": 8,
+    "app_default_threads": 2,
+    "validation_note": "actual isolated preparation/audio/render stages; full 30-frame render completed; test does not include a blink or guarantee identity preservation"
+  },
+  "latentsync": {
+    "automatic_install_complete": false,
+    "reason": "Intel GPU/NPU is incompatible with upstream CUDA requirements; no tested native Windows automatic installer in this release"
+  },
+  "blink": {
+    "duration_seconds": 0.5,
+    "minimum_interval_seconds": 6.2,
+    "max_amount": 0.78,
+    "default_enabled": false,
+    "model": "MuseTalk photo uses optional 2D warping; SadTalker uses learned motion coefficients; existing-video blinks preserved"
+  },
+  "distribution": {
+    "method": "standard Deflate, short ASCII root, no ZIP64",
+    "verification": "Standard Deflate ZIP without ZIP64; release checks CRC, extraction through Python and InfoZIP, file hashes, and byte-for-byte download-back SHA256."
+  },
+  "musetalk_real_test": {
+    "input": "same original real-person first frame and same 1.2-sec audio as SadTalker",
+    "frames": 15,
+    "fps": 12,
+    "resolution": [
+      864,
+      1184
+    ],
+    "peaks_mib": {
+      "audio": 322.4,
+      "encode": 407.6,
+      "infer": 5372.4,
+      "decode": 541.3,
+      "compose": 74.1
+    }
+  }
+}

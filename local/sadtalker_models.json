@@ -1,0 +1,32 @@
+[
+  {
+    "name": "source.zip",
+    "url": "https://codeload.github.com/OpenTalker/SadTalker/zip/cd4c0465ae0b54a6f85af57f5c65fec9fe23e7f8",
+    "size": 70641560,
+    "sha256": "66fb9e5a853120314ef527a04c61f661965ca369482768c2ab3a443be766a960"
+  },
+  {
+    "name": "checkpoints/SadTalker_V0.0.2_512.safetensors",
+    "url": "https://github.com/OpenTalker/SadTalker/releases/download/v0.0.2-rc/SadTalker_V0.0.2_512.safetensors",
+    "size": 725066984,
+    "sha256": "0e063f7ff5258240bdb0f7690783a7b1374e6a4a81ce8fa33456f4cd49694340"
+  },
+  {
+    "name": "checkpoints/mapping_00109-model.pth.tar",
+    "url": "https://github.com/OpenTalker/SadTalker/releases/download/v0.0.2-rc/mapping_00109-model.pth.tar",
+    "size": 155779231,
+    "sha256": "84a8642468a3fcfdd9ab6be955267043116c2bec2284686a5262f1eaf017f64c"
+  },
+  {
+    "name": "gfpgan/weights/alignment_WFLW_4HG.pth",
+    "url": "https://github.com/xinntao/facexlib/releases/download/v0.1.0/alignment_WFLW_4HG.pth",
+    "size": 193670248,
+    "sha256": "bbfd137307a4c7debd5c283b9b0ce539466cee417ac0a155e184d857f9f2899c"
+  },
+  {
+    "name": "gfpgan/weights/detection_Resnet50_Final.pth",
+    "url": "https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth",
+    "size": 109497761,
+    "sha256": "6d1de9c2944f2ccddca5f5e010ea5ae64a39845a86311af6fdf30841b0a5a16d"
+  }
+]
