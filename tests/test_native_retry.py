@@ -34,9 +34,9 @@ class RetryTests(unittest.TestCase):
             cfg.write_text(json.dumps(dict(output=str(folder/'video.mp4'), run_id='test',
                 device='GPU.0', runtime='openvino', npu_assist=True, peak_budget_mb=6144, scenario=scenario)))
             result = subprocess.run([sys.executable,'-I',str(folder/'stage_dispatch.py'),
-                '--script','stage_worker.py','--config',str(cfg),'--stage','infer'], capture_output=True, text=True, timeout=10)
-            events=[json.loads(x) for x in (folder/'process-exits.jsonl').read_text().splitlines()]
-            success=json.loads((folder/'cpu-success.json').read_text()) if (folder/'cpu-success.json').exists() else None
+                '--script','stage_worker.py','--config',str(cfg),'--stage','infer'], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=10)
+            events=[json.loads(x) for x in (folder/'process-exits.jsonl').read_text(encoding='utf-8').splitlines()]
+            success=json.loads((folder/'cpu-success.json').read_text(encoding='utf-8')) if (folder/'cpu-success.json').exists() else None
             return result, events, success
 
     def test_native_crash_reaps_then_cpu(self):

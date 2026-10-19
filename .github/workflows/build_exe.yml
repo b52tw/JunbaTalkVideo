@@ -19,6 +19,9 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mask_review_approved == true }}
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
