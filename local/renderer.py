@@ -201,7 +201,9 @@ def main():
     if box_fallback_frames:
         note+=f'；警告：{box_fallback_frames} 格改用確認嘴框＋邊緣羽化'
     if note:note+='，請目視檢查'
-    emit(stage='done',actual=actual,message='精緻對嘴完成；原圖細節及片頭片尾已保留'+note)
+    if puppet_mode:mode_text='卡通原圖唇形擺動（'+('B 口型切換' if cfg.get('puppet_style')=='shapes' else 'A 連續開合')+'）'
+    else:mode_text='MuseTalk AI 對嘴（合成：'+('卡通整塊融合' if cartoon_block else '真人精準唇線')+'）'
+    emit(stage='done',actual=actual,message='完成；本次使用：'+mode_text+'；原圖細節及片頭片尾已保留'+note)
 if __name__=='__main__':
     try:main()
     except __import__('inference_backend').CPUFallbackRequired as e:emit(stage='fallback',message='退出修復後端，等待新 CPU 程序：'+str(e));sys.exit(75)

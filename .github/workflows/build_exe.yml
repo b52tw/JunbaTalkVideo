@@ -86,14 +86,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Wrapper build failed' }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: JunbaTalkVideo_v0.8.3_EmbeddedPortable.zip
-          path: dist/JunbaTalkVideo_v0.8.3_EmbeddedPortable.zip
+          name: JunbaTalkVideo_v0.8.4_EmbeddedPortable.zip
+          path: dist/JunbaTalkVideo_v0.8.4_EmbeddedPortable.zip
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: JunbaTalkVideo_v0.8.3.exe
-          path: dist/JunbaTalkVideo_v0.8.3.exe
+          name: JunbaTalkVideo_v0.8.4.exe
+          path: dist/JunbaTalkVideo_v0.8.4.exe
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -102,6 +102,6 @@ jobs:
           name: Windows-validation-and-small-portable
           path: |
             dist/*.json
-            dist/JunbaTalkVideo_v0.8.3_Windows64.zip
+            dist/JunbaTalkVideo_v0.8.4_Windows64.zip
             dist/JunbaTalkVideo_PyInstaller.exe
           if-no-files-found: warn
