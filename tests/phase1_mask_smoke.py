@@ -5,7 +5,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'local'))
 
 def main():
     import cv2,numpy as np
-    from semantic_mouth import locate_mouth,edge_face_anchors,heatmap_reliability,style_profile,prepare_face,ContourNotReliable,geometry,union_geometry,box_pixels
+    from semantic_mouth import locate_mouth,edge_face_anchors,heatmap_reliability,style_profile,prepare_face,ContourNotReliable,geometry,union_geometry,box_pixels,refine_eye_seed
     from contour_mask import masks,overlay,ContourTracker,safe_region
     from quality import blend_mouth
     p=argparse.ArgumentParser();p.add_argument('--out',required=True);p.add_argument('--baseline-source');a=p.parse_args()
@@ -61,6 +61,15 @@ def main():
     try:masks(geometry([[.40,.60],[.50,.58],[.60,.60],[.60,.66],[.50,.69],[.40,.66]],[],'test'),face,320,256,4,tight)
     except ContourNotReliable:rejected_far=True
     assert rejected_far,'contour mostly outside the mouth box must be rejected'
+    # v0.8.3b: a seed on a thick cartoon eyebrow must move down to the eye.
+    toon=np.full((240,240,3),(150,185,235),np.uint8)
+    cv2.ellipse(toon,(120,70),(40,10),0,180,360,(20,20,25),-1)            # eyebrow
+    cv2.ellipse(toon,(120,120),(30,16),0,0,360,(245,245,245),-1)          # sclera
+    cv2.circle(toon,(124,120),11,(30,40,60),-1)                           # pupil
+    eye_box=refine_eye_seed(toon,[80/240,55/240,80/240,20/240])
+    assert eye_box is not None,'cartoon eye not found below eyebrow'
+    eye_cy=(eye_box[1]+eye_box[3]/2)*240
+    assert 105<eye_cy<135,f'eye seed stayed on eyebrow ({eye_cy:.0f})'
     for _ in range(5):tracker.update(None)
     try:tracker.update(None)
     except ContourNotReliable:pass

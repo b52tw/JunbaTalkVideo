@@ -63,7 +63,10 @@ def _edge_contour(image, seed, kind='mouth'):
     h,w=image.shape[:2];x1,y1,x2,y2=box_pixels(seed,w,h)
     # A rough detector seed may clip upturned smile corners. Expand SEARCH only;
     # the returned mask still follows measured contours, never this rectangle.
-    padx=max(3,round((x2-x1)*.06));pady=max(3,round((y2-y1)*.24))
+    # v0.8.3b: cartoon smiles extend well past the five-point mouth corners and
+    # below the detector's flat mouth seed; widen the SEARCH area for the mouth.
+    if kind=='mouth':padx=max(3,round((x2-x1)*.15));pady=max(3,round((y2-y1)*.6))
+    else:padx=max(3,round((x2-x1)*.06));pady=max(3,round((y2-y1)*.24))
     x1,y1,x2,y2=max(0,x1-padx),max(0,y1-pady),min(w,x2+padx),min(h,y2+pady)
     roi=image[y1:y2,x1:x2]
     if min(roi.shape[:2])<8:raise ContourNotReliable('輪廓搜尋範圍太小')
@@ -88,7 +91,12 @@ def _edge_contour(image, seed, kind='mouth'):
             size=max(3,min(25,int(rw*.06)))|1
             combined=cv2.morphologyEx(combined,cv2.MORPH_OPEN,cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(size,size)))
             extra,_=cv2.findContours(combined,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
-            contours=list(contours)+list(extra)
+            # v0.8.3b: also offer the un-opened lip/teeth envelope. Opening can cut
+            # a thin cartoon smile into pieces and keep only the teeth; its
+            # external contour encloses teeth, cavity and both corners.
+            whole=cv2.morphologyEx(((gray<dark_cut)|neutral).astype(np.uint8)*255,cv2.MORPH_CLOSE,np.ones((5,5),np.uint8))
+            envelope,_=cv2.findContours(whole,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+            contours=list(contours)+list(extra)+list(envelope)
     for i,c in enumerate(contours):
         if len(c)<12:continue
         x,y,bw,bh=cv2.boundingRect(c);area=abs(cv2.contourArea(c))
@@ -132,10 +140,68 @@ def measured_safety_box(mouth_geometry,image,feather_px):
     lo=np.maximum(0,p.min(0)-[feather_px/w,feather_px/h]);hi=np.minimum(1,p.max(0)+[feather_px/w,feather_px/h])
     return [float(lo[0]),float(lo[1]),float(hi[0]-lo[0]),float(hi[1]-lo[1])]
 
+def refine_eye_seed(image, seed, floor=None):
+    """v0.8.3b: move an eye seed off a thick cartoon eyebrow onto the real eye.
+
+    Real-face detectors often place cartoon eye points on the bold eyebrow.
+    Search slightly above and well below the seed for the eye's white sclera
+    (low saturation, bright) joined with a dark pupil; eyebrows have no sclera.
+    Returns a measured box, or None so the caller keeps the original seed.
+    """
+    h,w=image.shape[:2];x1,y1,x2,y2=box_pixels(seed,w,h);sw,sh=max(4,x2-x1),max(4,y2-y1)
+    sx1,sx2=max(0,x1-round(sw*.35)),min(w,x2+round(sw*.35))
+    sy1,sy2=max(0,y1-round(sh*.5)),min(h,y2+round(sh*3.0))
+    if floor is not None:sy2=min(sy2,int(floor*h))
+    if sx2-sx1<8 or sy2-sy1<8:return None
+    roi=image[sy1:sy2,sx1:sx2];hsv=cv2.cvtColor(roi,cv2.COLOR_BGR2HSV)
+    sat,val=hsv[:,:,1].astype(np.int16),hsv[:,:,2].astype(np.int16)
+    # Absolute white OR clearly less saturated/brighter than this face's skin
+    # (shaded or warm-lit cartoon sclera is not pure white).
+    ms,mv=float(np.median(sat)),float(np.median(val))
+    sclera=(((sat<70)&(val>165))|((sat<ms*.75)&(val>mv*.8))).astype(np.uint8)
+    sclera=cv2.morphologyEx(sclera,cv2.MORPH_OPEN,np.ones((3,3),np.uint8))
+    dark=(val<95).astype(np.uint8)
+    n,labels,stats,cent=cv2.connectedComponentsWithStats(sclera)
+    rh,rw=sclera.shape;best=None;seed_cx=(x1+x2)/2-sx1
+    for i in range(1,n):
+        x,y,bw,bh,area=stats[i]
+        if area<max(12,rw*rh*.004) or bw>rw*.95 or bh>rh*.8:continue
+        # The sclera must touch a dark pupil/iris; skin highlights do not.
+        ring=cv2.dilate((labels==i).astype(np.uint8),np.ones((7,7),np.uint8))
+        if not np.any(ring&dark):continue
+        score=area-abs(cent[i][0]-seed_cx)*2
+        if best is None or score>best[0]:best=(score,i)
+    if best is None:return None
+    eye=cv2.dilate((labels==best[1]).astype(np.uint8),np.ones((7,7),np.uint8))
+    for k in range(1,n):
+        if k!=best[1] and stats[k][4]>=12 and np.any((labels==k)&(cv2.dilate(eye,np.ones((15,15),np.uint8))>0)):eye|=(labels==k).astype(np.uint8)
+    n2,l2,st2,_=cv2.connectedComponentsWithStats(dark)
+    for j in range(1,n2):
+        x,y,bw,bh,area=st2[j]
+        # Join the pupil/iris (roundish), never the long eyebrow arc.
+        if np.any((l2==j)&(eye>0)) and bw<=3*max(1,bh) and bw<rw*.6:eye|=(l2==j).astype(np.uint8)
+    ys,xs=np.nonzero(eye)
+    ex1,ex2,ey1,ey2=xs.min(),xs.max()+1,ys.min(),ys.max()+1;padx,pady=(ex2-ex1)*.12,(ey2-ey1)*.25
+    gx1,gy1=max(0,sx1+ex1-padx),max(0,sy1+ey1-pady);gx2,gy2=min(w,sx1+ex2+padx),min(h,sy1+ey2+pady)
+    return [float(gx1/w),float(gy1/h),float((gx2-gx1)/w),float((gy2-gy1)/h)]
+
+def _box_ellipse(box,count=32):
+    x,y,bw,bh=box;t=np.linspace(0,2*np.pi,count,endpoint=False)
+    return np.c_[x+bw/2+bw/2*np.cos(t),y+bh/2+bh/2*np.sin(t)].tolist()
+
 def edge_face_anchors(image, seeds, preserved_eyes=None):
     mouth=_edge_contour(image,seeds['mouth_box'])
     eye_contours=[];eye_boxes=[]
+    mouth_top=float(np.asarray(mouth['outer'])[:,1].min())
     for seed in seeds['eye_boxes']:
+        refined=None if preserved_eyes else refine_eye_seed(image,seed,floor=mouth_top)
+        if refined is not None:
+            try:eye=_edge_contour(image,refined,'eye')
+            except ContourNotReliable:eye=dict(outer=_box_ellipse(refined))
+            p=np.asarray(eye['outer']);lo=p.min(0);hi=p.max(0)
+            # Keep the edge contour only if it stays on the measured eye.
+            if hi[1]<refined[1] or lo[1]>refined[1]+refined[3]:eye=dict(outer=_box_ellipse(refined))
+            eye_contours.append(eye['outer']);eye_boxes.append(refined);continue
         try:eye=_edge_contour(image,seed,'eye')
         except ContourNotReliable:
             if preserved_eyes:continue
