@@ -322,7 +322,7 @@ func (a *App) installModelSet(models []LocalModel, marker, value string) error {
 		}
 
 	}
-	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz", "requirements.txt"} {
+	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "cartoon_puppet.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz", "requirements.txt"} {
 		b, _ := localFiles.ReadFile("local/" + name)
 		if e := os.WriteFile(filepath.Join(dir, name), b, 0600); e != nil {
 			return e
@@ -489,18 +489,20 @@ func (a *App) downloadArtifact(ctx context.Context, m LocalModel, dir string) er
 }
 
 type LocalRequest struct {
-	ColorTransfer   *bool  `json:"color_transfer"`
-	LidShadow       *bool  `json:"lid_shadow"`
-	PeakBudgetMB    int    `json:"peak_budget_mb"`
-	Runtime         string `json:"runtime"`
-	DMLAdapter      int    `json:"dml_adapter"`
-	NPUAssist       bool   `json:"npu_assist"`
-	BlendMode       string `json:"blend_mode"`
-	MouthScope      string `json:"mouth_scope"`
-	ComposeStyle    string `json:"compose_style"`
-	CompositionMode string `json:"composition_mode"`
-	BlinkProfile    string `json:"blink_profile"`
-	BrowMotion      bool   `json:"brow_motion"`
+	ColorTransfer   *bool   `json:"color_transfer"`
+	LidShadow       *bool   `json:"lid_shadow"`
+	PeakBudgetMB    int     `json:"peak_budget_mb"`
+	Runtime         string  `json:"runtime"`
+	DMLAdapter      int     `json:"dml_adapter"`
+	NPUAssist       bool    `json:"npu_assist"`
+	BlendMode       string  `json:"blend_mode"`
+	MouthScope      string  `json:"mouth_scope"`
+	ComposeStyle    string  `json:"compose_style"`
+	PuppetStyle     string  `json:"puppet_style"`
+	PuppetOpen      float64 `json:"puppet_open"`
+	CompositionMode string  `json:"composition_mode"`
+	BlinkProfile    string  `json:"blink_profile"`
+	BrowMotion      bool    `json:"brow_motion"`
 
 	Engine          string  `json:"engine"`
 	PoseStyle       int     `json:"pose_style"`
@@ -584,6 +586,18 @@ func validateLocal(q *LocalRequest) error {
 	}
 	if q.ComposeStyle != "auto" && q.ComposeStyle != "cartoon" && q.ComposeStyle != "real" {
 		return errors.New("無效合成方式")
+	}
+	if q.PuppetStyle == "" {
+		q.PuppetStyle = "smooth"
+	}
+	if q.PuppetStyle != "smooth" && q.PuppetStyle != "shapes" {
+		return errors.New("無效唇形擺動方式")
+	}
+	if q.PuppetOpen == 0 {
+		q.PuppetOpen = .55
+	}
+	if math.IsNaN(q.PuppetOpen) || q.PuppetOpen < .25 || q.PuppetOpen > .9 {
+		return errors.New("張嘴幅度需介於 0.25 至 0.9")
 	}
 	if q.CompositionMode != "mouth" && q.CompositionMode != "full" {
 		return errors.New("無效合成模式")
@@ -690,7 +704,7 @@ func (a *App) localGenerate(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, e)
 		return
 	}
-	if q.Engine != "musetalk" {
+	if q.Engine != "musetalk" && q.Engine != "puppet" {
 		a.externalGenerate(w, r, q)
 		return
 	}
@@ -732,6 +746,12 @@ func (a *App) localGenerate(w http.ResponseWriter, r *http.Request) {
 		a.mu.Unlock()
 		a.localMu.Unlock()
 		fail(w, 409, errors.New("請先製作語音並確認素材。"))
+		return
+	}
+	if q.Engine == "puppet" && j.Kind != "photo" {
+		a.mu.Unlock()
+		a.localMu.Unlock()
+		fail(w, 409, errors.New("卡通原圖唇形只支援照片素材；影片請改用 MuseTalk。"))
 		return
 	}
 	j.FaceBox = append([]float64{}, q.BBox...)
@@ -788,6 +808,9 @@ func (a *App) localGenerate(w http.ResponseWriter, r *http.Request) {
 	j.LeadSeconds = lead
 	j.LocalSettings = &q
 	j.Message = "準備在本機執行 MuseTalk；首次編譯可能需要數分鐘。"
+	if q.Engine == "puppet" {
+		j.Message = "準備卡通原圖唇形擺動（不使用 AI 模型）。"
+	}
 	j.Format, j.Aspect, j.Resolution = normalizeExport(q.Format, q.Aspect, q.Resolution)
 	j.CaptionMode = captionMode(q.CaptionMode)
 	a.persist(j)
@@ -844,6 +867,10 @@ func (a *App) runLocal(ctx context.Context, q LocalRequest) {
 			phases = append(phases, phase{"stage_worker.py", []string{"--stage", name}})
 		}
 		phases = append(phases, phase{"renderer.py", nil})
+	}
+	if q.Engine == "puppet" {
+		// Cartoon lip puppet warps the original mouth; no neural stages.
+		phases = []phase{{"renderer.py", nil}}
 	}
 	for _, work := range phases {
 		lastError, workerError := a.runLocalWorker(ctx, q.ID, work.script, filepath.Join(dir, "local-config.json"), log, work.args...)

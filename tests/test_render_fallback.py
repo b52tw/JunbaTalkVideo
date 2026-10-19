@@ -45,4 +45,25 @@ class RenderFallback(unittest.TestCase):
         # It must still stop well below the eyes (top of face crop untouched).
         self.assertEqual(float(toon[:60].max()),0.0)
 
+    def test_cartoon_puppet_both_modes_render(self):
+        ffmpeg=shutil.which('ffmpeg')
+        if not ffmpeg:self.skipTest('FFmpeg required')
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp)
+            img=np.full((480,360,3),(150,185,235),np.uint8)
+            cv2.ellipse(img,(180,300),(60,22),0,0,180,(40,30,120),-1)
+            cv2.rectangle(img,(130,300),(230,312),(245,245,245),-1)
+            cv2.imwrite(str(d/'src.png'),img)
+            s=(np.sin(np.arange(24000)*2*np.pi*220/16000)*(np.arange(24000)%8000<4000)*8000).astype('<i2')
+            with wave.open(str(d/'a.wav'),'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000);f.writeframes(s.tobytes())
+            for style in ('smooth','shapes'):
+                cfg=dict(source=str(d/'src.png'),audio=str(d/'a.wav'),output=str(d/(style+'.mp4')),ffmpeg=ffmpeg,kind='photo',device='CPU',
+                         engine='puppet',puppet_style=style,puppet_open=.55,fps=12,max_side=480,bbox=[.2,.3,.6,.5],mouth_box=[.3,.58,.4,.12],eye_boxes=[],lead=.2,tail=.2,run_id='p')
+                (d/'cfg.json').write_text(json.dumps(cfg),encoding='utf-8')
+                p=subprocess.run([sys.executable,'-I',str(ROOT/'local/renderer.py'),'--config',str(d/'cfg.json')],
+                                 capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=120)
+                self.assertEqual(p.returncode,0,p.stdout[-1500:]+p.stderr[-1500:])
+                self.assertIn('卡通原圖唇形擺動',p.stdout)
+                self.assertTrue((d/'local-render.mp4').exists() or (d/(style+'.mp4')).exists())
+
 if __name__=='__main__':unittest.main()

@@ -456,7 +456,7 @@ func validateAdvanced(q *LocalRequest) error {
 	if q.Engine == "" {
 		q.Engine = "musetalk"
 	}
-	if q.Engine != "musetalk" && !validExternalName(q.Engine) {
+	if q.Engine != "musetalk" && q.Engine != "puppet" && !validExternalName(q.Engine) {
 		return errors.New("不支援的本機引擎")
 	}
 	if q.ExpressionScale == 0 {

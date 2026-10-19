@@ -18,8 +18,10 @@ def main():
     cv2.setNumThreads(2)
     cfg=json.loads(Path(args.config).read_text(encoding='utf-8-sig'));process_policy(cfg)
     threads=2 if cfg.get('low_impact',True) else 4
-    target=Path(cfg['output']);meta=json.loads(target.with_name('mouth-cache.json').read_text(encoding='utf-8'))
-    cache=target.with_name('mouth-cache');actual=meta['actual'];total=meta['frames'];fps=meta['fps'];w=meta['width'];h=meta['height']
+    target=Path(cfg['output']);puppet_mode=cfg.get('engine')=='puppet'
+    if not puppet_mode:
+        meta=json.loads(target.with_name('mouth-cache.json').read_text(encoding='utf-8'))
+        cache=target.with_name('mouth-cache');actual=meta['actual'];total=meta['frames'];fps=meta['fps'];w=meta['width'];h=meta['height']
     photo=cfg.get('kind')=='photo';flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
     if photo:first=cv2.imdecode(np.fromfile(cfg['source'],dtype=np.uint8),cv2.IMREAD_COLOR)
     else:
@@ -27,10 +29,31 @@ def main():
         if read.returncode:raise RuntimeError('無法讀取素材影片')
         first=cv2.imdecode(np.frombuffer(read.stdout,dtype=np.uint8),cv2.IMREAD_COLOR)
     if first is None:raise RuntimeError('無法讀取原始素材')
+    puppet=None;puppet_track=None
+    if puppet_mode:
+        # v0.8.3b cartoon lip puppet: no neural model; warp the original mouth.
+        if not photo:raise RuntimeError('卡通原圖唇形只支援照片素材')
+        h0,w0=first.shape[:2];scale=min(1.,float(cfg.get('max_side',1920))/max(h0,w0))
+        w,h=max(2,int(w0*scale)//2*2),max(2,int(h0*scale)//2*2);fps=int(cfg.get('fps',25) or 25)
+        cfg['anime_detail']=False;cfg['real_detail']=False;cfg['contour_mode']=False
     base=cv2.resize(first,(w,h),interpolation=cv2.INTER_AREA)
+    if puppet_mode:
+        from cartoon_puppet import CartoonPuppet,mouth_drive,viseme_track
+        from semantic_mouth import locate_mouth
+        try:outer=locate_mouth(base,dict(cfg,landmarks=[]))['outer']
+        except Exception as e:
+            # No measurable lip line: use an ellipse inside the confirmed mouth box.
+            x,y,bw_,bh_=cfg['mouth_box'];t=np.linspace(0,2*np.pi,32,endpoint=False)
+            outer=np.c_[x+bw_/2+bw_*.48*np.cos(t),y+bh_/2+bh_*.48*np.sin(t)].tolist()
+            emit(stage='compose',message='警告：原圖唇線不清楚（'+str(e)[:80]+'）；改用確認嘴框推估上下唇')
+        puppet=CartoonPuppet(base,outer,max_open=float(cfg.get('puppet_open',.55)))
+        shapes=cfg.get('puppet_style','smooth')=='shapes'
+        puppet_track=viseme_track(cfg['audio'],fps) if shapes else [(float(v),0.) for v in mouth_drive(cfg['audio'],fps)]
+        total=len(puppet_track);actual={'cartoon_puppet':['CPU / '+('五種口型切換' if shapes else '連續開合')]}
+        emit(stage='compose',actual=actual,message='卡通原圖唇形擺動：'+('B 口型切換（閉／半開／大開／圓唇／咧嘴）' if shapes else 'A 連續開合')+'；不使用 AI 重繪')
     contour_report=None;contour_tracker=None;source_geometry=None
     contour_file=target.with_name('mouth-contour.json')
-    if contour_file.is_file():
+    if contour_file.is_file() and not puppet_mode:
         candidate=json.loads(contour_file.read_text(encoding='utf-8'))
         if candidate.get('run_id')==cfg.get('run_id','direct'):contour_report=candidate
     user_mouth_box=list(cfg['mouth_box']) if cfg.get('mouth_box') else None
@@ -107,45 +130,49 @@ def main():
                 raw=decoder.stdout.read(w*h*3)
                 if len(raw)!=w*h*3:raise RuntimeError('原始影片讀取中斷')
                 frame=np.frombuffer(raw,dtype=np.uint8).reshape(h,w,3)
-            generated=cv2.imdecode(np.fromfile(str(cache/f'{i:05d}.png'),dtype=np.uint8),cv2.IMREAD_COLOR)
-            if generated is None:raise RuntimeError('嘴型暫存不完整，請重新生成')
-            active_geometry=None;tracking_status=''
-            if contour_tracker is not None:
-                try:found=dynamic_geometry(generated,cfg['bbox'],cfg['mouth_box'])
-                except Exception:found=None  # any detection failure = lost contour, never fatal
-                current_geometry,tracking_status=contour_tracker.update(found)
-                active_geometry=current_geometry if tracking_status=='confirmed mouth envelope' else union_geometry(source_geometry,current_geometry)
-                if found is None:emit(stage='compose',message='動態唇線不足；沿用上一精確輪廓'+('，此格改用已確認嘴區範圍' if tracking_status=='confirmed mouth envelope' else ''))
-            if enhancer is not None:
-                if cfg.get('real_detail'):
-                    x=cv2.resize(generated,(512,512),interpolation=cv2.INTER_CUBIC)
-                    enhanced=enhancer([(x[:,:,::-1].transpose(2,0,1)[None].astype(np.float32)/127.5-1)])[0][0]
-                    restored=np.clip((enhanced.transpose(1,2,0)+1)*127.5,0,255).astype(np.uint8)[:,:,::-1]
-                    # High-frequency residual only: retain the speech model's
-                    # low-frequency mouth opening/shape instead of replacing it.
-                    detail_base=cv2.resize(generated,(512,512),interpolation=cv2.INTER_CUBIC).astype(np.float32)
-                    residual=restored.astype(np.float32)-cv2.GaussianBlur(restored.astype(np.float32),(0,0),2.0)
-                    strength=float(cfg.get('detail_strength',.5))
-                    generated=np.clip(detail_base+np.clip(residual,-24,24)*strength,0,255).astype(np.uint8)
-                else:
-                    enhanced=enhancer([generated[:,:,::-1].transpose(2,0,1)[None].astype(np.float32)/255.])[0][0]
-                    restored=np.clip(enhanced.transpose(1,2,0)*255.,0,255).astype(np.uint8)[:,:,::-1]
-                    base_detail=cv2.resize(generated,(restored.shape[1],restored.shape[0]),interpolation=cv2.INTER_LANCZOS4).astype(np.float32)
-                    residual=restored.astype(np.float32)-cv2.GaussianBlur(restored.astype(np.float32),(0,0),1.6)
-                    generated=np.clip(base_detail+np.clip(residual,-18,18)*float(cfg.get('detail_strength',.5)),0,255).astype(np.uint8)
-            motion_frame=torso.apply(i/fps) if torso is not None else frame
-            blend_args=dict(blend=cfg.get('blend_mode','feather'),scope='cartoon' if cartoon_block else cfg.get('mouth_scope','lips'),full=cfg.get('composition_mode')=='full',color_transfer=cfg.get('color_transfer',True),feather_px=contour_report['feather_px'] if contour_report else 4)
-            safety=user_mouth_box if tracking_status=='confirmed mouth envelope' else cfg.get('mouth_box')
-            result=None
-            # v0.8.3b fallback chain, never aborting the video:
-            # dynamic contour -> source contour -> confirmed box with feathering.
-            for label,geom,box in (('動態唇線',active_geometry,safety),('原圖精確唇線',source_geometry,cfg.get('mouth_box'))):
-                if geom is None:continue
-                try:result=blend_mouth(motion_frame,generated,cfg['bbox'],box,mouth_geometry=geom,**blend_args);break
-                except (ContourNotReliable,ValueError) as e:emit(stage='compose',message=f'警告：第 {i+1} 格{label}無法使用（{e}）')
-            if result is None:
-                if active_geometry is not None:box_fallback_frames+=1
-                result=blend_mouth(motion_frame,generated,cfg['bbox'],user_mouth_box or cfg.get('mouth_box'),mouth_geometry=None,**blend_args)
+            if puppet is not None:
+                motion_frame=torso.apply(i/fps) if torso is not None else frame
+                opening,width=puppet_track[i];result=puppet.frame(opening,motion_frame,width)
+            else:
+                generated=cv2.imdecode(np.fromfile(str(cache/f'{i:05d}.png'),dtype=np.uint8),cv2.IMREAD_COLOR)
+                if generated is None:raise RuntimeError('嘴型暫存不完整，請重新生成')
+                active_geometry=None;tracking_status=''
+                if contour_tracker is not None:
+                    try:found=dynamic_geometry(generated,cfg['bbox'],cfg['mouth_box'])
+                    except Exception:found=None  # any detection failure = lost contour, never fatal
+                    current_geometry,tracking_status=contour_tracker.update(found)
+                    active_geometry=current_geometry if tracking_status=='confirmed mouth envelope' else union_geometry(source_geometry,current_geometry)
+                    if found is None:emit(stage='compose',message='動態唇線不足；沿用上一精確輪廓'+('，此格改用已確認嘴區範圍' if tracking_status=='confirmed mouth envelope' else ''))
+                if enhancer is not None:
+                    if cfg.get('real_detail'):
+                        x=cv2.resize(generated,(512,512),interpolation=cv2.INTER_CUBIC)
+                        enhanced=enhancer([(x[:,:,::-1].transpose(2,0,1)[None].astype(np.float32)/127.5-1)])[0][0]
+                        restored=np.clip((enhanced.transpose(1,2,0)+1)*127.5,0,255).astype(np.uint8)[:,:,::-1]
+                        # High-frequency residual only: retain the speech model's
+                        # low-frequency mouth opening/shape instead of replacing it.
+                        detail_base=cv2.resize(generated,(512,512),interpolation=cv2.INTER_CUBIC).astype(np.float32)
+                        residual=restored.astype(np.float32)-cv2.GaussianBlur(restored.astype(np.float32),(0,0),2.0)
+                        strength=float(cfg.get('detail_strength',.5))
+                        generated=np.clip(detail_base+np.clip(residual,-24,24)*strength,0,255).astype(np.uint8)
+                    else:
+                        enhanced=enhancer([generated[:,:,::-1].transpose(2,0,1)[None].astype(np.float32)/255.])[0][0]
+                        restored=np.clip(enhanced.transpose(1,2,0)*255.,0,255).astype(np.uint8)[:,:,::-1]
+                        base_detail=cv2.resize(generated,(restored.shape[1],restored.shape[0]),interpolation=cv2.INTER_LANCZOS4).astype(np.float32)
+                        residual=restored.astype(np.float32)-cv2.GaussianBlur(restored.astype(np.float32),(0,0),1.6)
+                        generated=np.clip(base_detail+np.clip(residual,-18,18)*float(cfg.get('detail_strength',.5)),0,255).astype(np.uint8)
+                motion_frame=torso.apply(i/fps) if torso is not None else frame
+                blend_args=dict(blend=cfg.get('blend_mode','feather'),scope='cartoon' if cartoon_block else cfg.get('mouth_scope','lips'),full=cfg.get('composition_mode')=='full',color_transfer=cfg.get('color_transfer',True),feather_px=contour_report['feather_px'] if contour_report else 4)
+                safety=user_mouth_box if tracking_status=='confirmed mouth envelope' else cfg.get('mouth_box')
+                result=None
+                # v0.8.3b fallback chain, never aborting the video:
+                # dynamic contour -> source contour -> confirmed box with feathering.
+                for label,geom,box in (('動態唇線',active_geometry,safety),('原圖精確唇線',source_geometry,cfg.get('mouth_box'))):
+                    if geom is None:continue
+                    try:result=blend_mouth(motion_frame,generated,cfg['bbox'],box,mouth_geometry=geom,**blend_args);break
+                    except (ContourNotReliable,ValueError) as e:emit(stage='compose',message=f'警告：第 {i+1} 格{label}無法使用（{e}）')
+                if result is None:
+                    if active_geometry is not None:box_fallback_frames+=1
+                    result=blend_mouth(motion_frame,generated,cfg['bbox'],user_mouth_box or cfg.get('mouth_box'),mouth_geometry=None,**blend_args)
             if photo:result=photo_motion(result,cfg['bbox'],i/fps,cfg.get('eye_boxes',[]) if cfg.get('blink') or cfg.get('gaze') else [],cfg.get('gaze',False),cfg.get('micro_motion',False),cfg.get('blink',False),'' if cfg.get('body_motion')=='speech' else cfg.get('body_motion',''),cfg.get('hand_box',[]),cfg.get('blink_profile','bezier'),cfg.get('brow_motion',False),cfg.get('lid_shadow',True))
             if i==0:
                 for k in range(lead_frames):

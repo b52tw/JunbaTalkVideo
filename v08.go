@@ -41,6 +41,9 @@ func v08Config(cfg map[string]any, q LocalRequest) {
 	cfg["blend_mode"] = q.BlendMode
 	cfg["mouth_scope"] = q.MouthScope
 	cfg["compose_style"] = q.ComposeStyle
+	cfg["engine"] = q.Engine
+	cfg["puppet_style"] = q.PuppetStyle
+	cfg["puppet_open"] = q.PuppetOpen
 	cfg["composition_mode"] = q.CompositionMode
 	cfg["blink_profile"] = q.BlinkProfile
 	cfg["brow_motion"] = q.BrowMotion
