@@ -49,7 +49,10 @@ def main():
         mouth_geometry=found['mouth_geometry'];eye_contours=found['eye_contours']
         polygon=np.asarray(mouth_geometry['outer']);lo=np.maximum(0,polygon.min(0)-[5/w,5/h]);hi=np.minimum(1,polygon.max(0)+[5/w,5/h])
         regions=dict(bbox=seeds['bbox'],mouth_box=[float(lo[0]),float(lo[1]),float(hi[0]-lo[0]),float(hi[1]-lo[1])],
-                     eye_boxes=found['eye_boxes'],landmarks=mouth_geometry['outer']+sum(eye_contours,[]))
+                     eye_boxes=found['eye_boxes'],landmarks=[])
+        # v0.8.3b: contour points are NOT 98-point semantics; downstream only reads
+        # 98-point landmarks, and the app rejects other counts. Mouth/eyes are
+        # re-measured from the confirmed boxes, so send no landmark list here.
         method=found['method']
         warnings.append('98 點不足；已採用影像輪廓輔助點，插值點不是新增的語義證據。請先檢查遮罩預覽。')
     # Reject grossly inconsistent landmark layouts instead of returning bad boxes.

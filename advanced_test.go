@@ -38,10 +38,20 @@ func TestAdvancedValidationAndLiteralArguments(t *testing.T) {
 	if args[1] != filepath.Join(c.Root, "inference.py") || !strings.Contains(strings.Join(args, "\n"), "/speech ' quote.wav") || args[len(args)-1] != "--cpu" {
 		t.Fatal(args)
 	}
-	q.Landmarks = [][]float64{{.5, .5}}
-	if validateLocal(&q) == nil {
-		t.Fatal("invalid point count")
+	// v0.8.3b: an unusable point count (e.g. 96 contour points) is dropped,
+	// not fatal; bad coordinates are still rejected.
+	q.Landmarks = make([][]float64, 96)
+	for i := range q.Landmarks {
+		q.Landmarks[i] = []float64{.5, .5}
 	}
+	if e := validateLocal(&q); e != nil || q.Landmarks != nil {
+		t.Fatal("unusable point count should be dropped", e)
+	}
+	q.Landmarks = [][]float64{{.5, .5}, {.5, .5}, {.5, .5}, {.5, .5}, {1.5, .5}}
+	if validateLocal(&q) == nil {
+		t.Fatal("out-of-range landmark accepted")
+	}
+	q.Landmarks = nil
 	a := newApp(t.TempDir())
 	if r := request(t, a, "GET", "/api/local/engines", nil, "", false); r.Code != 403 {
 		t.Fatal("external settings need session")

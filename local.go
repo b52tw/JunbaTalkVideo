@@ -595,7 +595,10 @@ func validateLocal(q *LocalRequest) error {
 		return e
 	}
 	if len(q.Landmarks) != 0 && len(q.Landmarks) != 5 && len(q.Landmarks) != 98 {
-		return errors.New("五官關鍵點數量無效")
+		// v0.8.3b: contour-fallback locating used to send 96 geometric points.
+		// Only 98-point landmarks are consumed downstream, and the confirmed
+		// mouth/eye boxes are re-measured anyway, so drop them instead of failing.
+		q.Landmarks = nil
 	}
 	for _, p := range q.Landmarks {
 		if len(p) != 2 || math.IsNaN(p[0]) || math.IsNaN(p[1]) || p[0] < 0 || p[0] > 1 || p[1] < 0 || p[1] > 1 {
