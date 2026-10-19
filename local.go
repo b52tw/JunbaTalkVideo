@@ -497,6 +497,7 @@ type LocalRequest struct {
 	NPUAssist       bool   `json:"npu_assist"`
 	BlendMode       string `json:"blend_mode"`
 	MouthScope      string `json:"mouth_scope"`
+	ComposeStyle    string `json:"compose_style"`
 	CompositionMode string `json:"composition_mode"`
 	BlinkProfile    string `json:"blink_profile"`
 	BrowMotion      bool   `json:"brow_motion"`
@@ -554,6 +555,9 @@ func validateLocal(q *LocalRequest) error {
 	if q.MouthScope == "" {
 		q.MouthScope = "lips"
 	}
+	if q.ComposeStyle == "" {
+		q.ComposeStyle = "auto"
+	}
 	if q.CompositionMode == "" {
 		q.CompositionMode = "mouth"
 	}
@@ -577,6 +581,9 @@ func validateLocal(q *LocalRequest) error {
 	}
 	if q.MouthScope != "lips" && q.MouthScope != "jaw" {
 		return errors.New("無效嘴部範圍")
+	}
+	if q.ComposeStyle != "auto" && q.ComposeStyle != "cartoon" && q.ComposeStyle != "real" {
+		return errors.New("無效合成方式")
 	}
 	if q.CompositionMode != "mouth" && q.CompositionMode != "full" {
 		return errors.New("無效合成模式")

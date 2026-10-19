@@ -42,7 +42,18 @@ def main():
             # v0.8.3b: no reliable source lip line -> feather the confirmed box.
             contour_report=None
             emit(stage='compose',message='警告：原圖唇線分析失敗（'+str(e)[:120]+'）；改用確認嘴框＋邊緣羽化合成')
-    if contour_report is not None:
+    # v0.8.3b: cartoon vs real compositing. Cartoons replace mouth + corners +
+    # smile creases as one feathered block; real faces use the precise lip line.
+    style=cfg.get('compose_style','auto')
+    detected=contour_report['profile']['style_type'] if contour_report else 'cartoon'
+    cartoon_block=style=='cartoon' or (style=='auto' and detected=='cartoon')
+    if contour_report is not None and cartoon_block:
+        profile=contour_report['profile']
+        cfg['real_detail']=False;cfg['anime_detail']=bool(cfg.get('anime_detail'));cfg['detail_strength']=.35
+        if user_mouth_box:cfg['mouth_box']=user_mouth_box
+        emit(stage='compose',message='卡通整塊融合：嘴巴、嘴角與笑紋一起替換（大範圍羽化）；眼框及眨眼排程不變')
+        contour_report=dict(contour_report,feather_px=4);contour_report['_cartoon']=True
+    if contour_report is not None and not cartoon_block:
         from contour_mask import ContourTracker,confirmed_envelope
         from semantic_mouth import dynamic_geometry,union_geometry,ContourNotReliable
         if contour_report['source_size']!=[w,h]:raise ValueError('唇線暫存尺寸不符，請重建遮罩')
@@ -123,7 +134,7 @@ def main():
                     residual=restored.astype(np.float32)-cv2.GaussianBlur(restored.astype(np.float32),(0,0),1.6)
                     generated=np.clip(base_detail+np.clip(residual,-18,18)*float(cfg.get('detail_strength',.5)),0,255).astype(np.uint8)
             motion_frame=torso.apply(i/fps) if torso is not None else frame
-            blend_args=dict(blend=cfg.get('blend_mode','feather'),scope=cfg.get('mouth_scope','lips'),full=cfg.get('composition_mode')=='full',color_transfer=cfg.get('color_transfer',True),feather_px=contour_report['feather_px'] if contour_report else 4)
+            blend_args=dict(blend=cfg.get('blend_mode','feather'),scope='cartoon' if cartoon_block else cfg.get('mouth_scope','lips'),full=cfg.get('composition_mode')=='full',color_transfer=cfg.get('color_transfer',True),feather_px=contour_report['feather_px'] if contour_report else 4)
             safety=user_mouth_box if tracking_status=='confirmed mouth envelope' else cfg.get('mouth_box')
             result=None
             # v0.8.3b fallback chain, never aborting the video:

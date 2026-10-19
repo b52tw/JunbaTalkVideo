@@ -25,7 +25,7 @@ class RenderFallback(unittest.TestCase):
             s=(np.sin(np.arange(32000)*2*np.pi*220/16000)*6000).astype('<i2')
             with wave.open(str(d/'a.wav'),'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000);f.writeframes(s.tobytes())
             cfg=dict(source=str(d/'src.png'),audio=str(d/'a.wav'),output=str(d/'out.mp4'),ffmpeg=ffmpeg,kind='photo',device='CPU',
-                     bbox=face,mouth_box=[.3,.58,.4,.12],eye_boxes=[],contour_mode=True,anime_detail=False,real_detail=False,lead=.2,tail=.2,run_id='t')
+                     bbox=face,mouth_box=[.3,.58,.4,.12],eye_boxes=[],contour_mode=True,compose_style='real',anime_detail=False,real_detail=False,lead=.2,tail=.2,run_id='t')
             (d/'cfg.json').write_text(json.dumps(cfg),encoding='utf-8')
             p=subprocess.run([sys.executable,'-I',str(ROOT/'local/renderer.py'),'--config',str(d/'cfg.json')],
                              capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=120)
@@ -33,5 +33,16 @@ class RenderFallback(unittest.TestCase):
             done=[json.loads(l) for l in p.stdout.splitlines() if l.startswith('{') and '"done"' in l]
             self.assertTrue(done and '警告' in done[-1]['message'],p.stdout[-1500:])
             self.assertTrue((d/'out.mp4').stat().st_size>1000)
+
+    def test_cartoon_block_replaces_whole_mouth_area(self):
+        import sys;sys.path.insert(0,str(ROOT/'local'))
+        from quality import mouth_mask
+        face=[.2,.3,.6,.5];mouth=[.3,.58,.4,.12]
+        lips=mouth_mask((256,256,3),face,mouth,'lips')[:,:,0];toon=mouth_mask((256,256,3),face,mouth,'cartoon')[:,:,0]
+        # Cartoon block must be wider (covers smile creases) and fully contain the lip mask.
+        self.assertGreater(np.count_nonzero(toon>.5),np.count_nonzero(lips>.5)*1.5)
+        self.assertTrue(np.all(toon>=lips-.35))
+        # It must still stop well below the eyes (top of face crop untouched).
+        self.assertEqual(float(toon[:60].max()),0.0)
 
 if __name__=='__main__':unittest.main()

@@ -40,6 +40,7 @@ func v08Config(cfg map[string]any, q LocalRequest) {
 	cfg["npu_assist"] = q.NPUAssist
 	cfg["blend_mode"] = q.BlendMode
 	cfg["mouth_scope"] = q.MouthScope
+	cfg["compose_style"] = q.ComposeStyle
 	cfg["composition_mode"] = q.CompositionMode
 	cfg["blink_profile"] = q.BlinkProfile
 	cfg["brow_motion"] = q.BrowMotion

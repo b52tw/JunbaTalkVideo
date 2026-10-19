@@ -19,6 +19,10 @@ def mouth_mask(shape, face, mouth, scope='lips'):
         mouth=[fx+fw*.23,fy+fh*.54,fw*.54,fh*.25]
     x,y,bw,bh=mouth
     if scope=='jaw':y+=bh*.10;bh*=1.75
+    # v0.8.3b cartoon: replace mouth, both corners and smile creases as one
+    # block (ChatGPT v0.x look). A tight lip mask leaves the original wide smile
+    # lines outside the narrower generated mouth ("double mouth").
+    if scope=='cartoon':x-=bw*.10;bw*=1.20;y-=bh*.05;bh*=1.70
     # Cover the original lip corners too; keep nose, cheeks and eyes outside.
     yy,xx=np.mgrid[:h,:w].astype(np.float32)
     cx=(x+bw/2-fx)/fw*w; cy=(y+bh/2-fy)/fh*h
@@ -28,9 +32,11 @@ def mouth_mask(shape, face, mouth, scope='lips'):
     corner=max(1,min(hw,hh)*.38)
     qx=np.abs(xx-cx)-(hw-corner); qy=np.abs(yy-cy)-(hh-corner)
     distance=np.sqrt(np.maximum(qx,0)**2+np.maximum(qy,0)**2)+np.minimum(np.maximum(qx,qy),0)-corner
-    feather=max(1,bh/fh*h*.16)
-    t=np.clip(-distance/feather,0,1)
-    return (t*t*(3-2*t))[:,:,None]
+    feather=max(1,bh/fh*h*(.30 if scope=='cartoon' else .16))
+    t=np.clip(-distance/feather,0,1);m=(t*t*(3-2*t))[:,:,None]
+    # The wide cartoon block must always fully include the lip area itself.
+    if scope=='cartoon':m=np.maximum(m,mouth_mask(shape,face,mouth,'lips'))
+    return m
 
 
 def blend_mouth(source, generated, face, mouth, detail=None, blend='feather', scope='lips', full=False, color_transfer=True, mouth_geometry=None, feather_px=4):
