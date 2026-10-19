@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.modules['openvino_telemetry']=None
 from runtime_support import process_policy,report_peak
+from semantic_mouth import ContourNotReliable
 
 def emit(**obj):print(json.dumps(obj,ensure_ascii=False),flush=True)
 def main():
@@ -109,7 +110,14 @@ def main():
                     residual=restored.astype(np.float32)-cv2.GaussianBlur(restored.astype(np.float32),(0,0),1.6)
                     generated=np.clip(base_detail+np.clip(residual,-18,18)*float(cfg.get('detail_strength',.5)),0,255).astype(np.uint8)
             motion_frame=torso.apply(i/fps) if torso is not None else frame
-            result=blend_mouth(motion_frame,generated,cfg['bbox'],cfg.get('mouth_box'),blend=cfg.get('blend_mode','feather'),scope=cfg.get('mouth_scope','lips'),full=cfg.get('composition_mode')=='full',color_transfer=cfg.get('color_transfer',True),mouth_geometry=active_geometry,feather_px=contour_report['feather_px'] if contour_report else 4)
+            blend_args=dict(blend=cfg.get('blend_mode','feather'),scope=cfg.get('mouth_scope','lips'),full=cfg.get('composition_mode')=='full',color_transfer=cfg.get('color_transfer',True),feather_px=contour_report['feather_px'] if contour_report else 4)
+            try:result=blend_mouth(motion_frame,generated,cfg['bbox'],cfg.get('mouth_box'),mouth_geometry=active_geometry,**blend_args)
+            except ContourNotReliable:
+                # v0.8.3b: one bad dynamic contour must not abort the whole video.
+                # Fall back to the user-confirmed source lip contour for this frame.
+                if active_geometry is None or source_geometry is None:raise
+                emit(stage='compose',message=f'第 {i+1} 格動態唇線超出嘴區；此格改用原圖精確唇線')
+                result=blend_mouth(motion_frame,generated,cfg['bbox'],cfg.get('mouth_box'),mouth_geometry=source_geometry,**blend_args)
             if photo:result=photo_motion(result,cfg['bbox'],i/fps,cfg.get('eye_boxes',[]) if cfg.get('blink') or cfg.get('gaze') else [],cfg.get('gaze',False),cfg.get('micro_motion',False),cfg.get('blink',False),'' if cfg.get('body_motion')=='speech' else cfg.get('body_motion',''),cfg.get('hand_box',[]),cfg.get('blink_profile','bezier'),cfg.get('brow_motion',False),cfg.get('lid_shadow',True))
             if i==0:
                 for k in range(lead_frames):

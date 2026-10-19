@@ -3,6 +3,22 @@ import cv2
 import numpy as np
 from semantic_mouth import ContourNotReliable,valid_polygon,box_pixels
 
+# Fraction of lip area allowed outside the confirmed mouth box before the
+# contour is treated as unreliable (beyond this the overflow is clipped).
+MAX_OVERFLOW_RATIO=.35
+# An open jaw moves the lower lip DOWN; allow that, never upward toward the nose.
+JAW_EXTEND_RATIO=.35
+SIDE_EXTEND_RATIO=.06
+
+def safe_region(box,width,height,face_roi=None):
+    """Confirmed mouth box in pixels, extended downward for an open jaw."""
+    bx1,by1,bx2,by2=box_pixels(box,width,height)
+    side=round((bx2-bx1)*SIDE_EXTEND_RATIO);down=round((by2-by1)*JAW_EXTEND_RATIO)
+    bx1,bx2,by2=max(0,bx1-side),min(width,bx2+side),min(height,by2+down)
+    if face_roi is not None:
+        fx1,fy1,fx2,fy2=face_roi;bx1,by1,bx2,by2=max(bx1,fx1),max(by1,fy1),min(bx2,fx2),min(by2,fy2)
+    return bx1,by1,bx2,by2
+
 def masks(geometry,face,width,height,feather_px=4,safety_box=None):
     if feather_px not in (3,4,5):raise ValueError('輪廓外羽化只允許 3、4、5 px')
     fx,fy,fw,fh=face
@@ -25,10 +41,22 @@ def masks(geometry,face,width,height,feather_px=4,safety_box=None):
     t=np.clip(1-outside/feather_px,0,1);alpha=t*t*(3-2*t)
     allowed=outside<feather_px
     if safety_box is not None:
-        bx1,by1,bx2,by2=box_pixels(safety_box,width,height)
+        bx1,by1,bx2,by2=safe_region(safety_box,width,height,(x1,y1,x2,y2))
         safe=np.zeros(shape,bool)
         safe[max(0,by1-y1):max(0,min(shape[0],by2-y1)),max(0,bx1-x1):max(0,min(shape[1],bx2-x1))]=True
-        if np.any((hard>0)&~safe):raise ContourNotReliable('唇線越過已確認嘴區；不擴張到鼻下或下巴')
+        # v0.8.3b: an open mouth can legitimately extend a few pixels past the
+        # closed-mouth box. Clip to the confirmed box (never repaint nose/chin)
+        # and only reject when the contour is mostly outside (detection error).
+        lip_area=int(np.count_nonzero(hard))
+        overflow=int(np.count_nonzero((hard>0)&~safe))
+        if lip_area==0 or overflow>MAX_OVERFLOW_RATIO*lip_area:
+            raise ContourNotReliable('唇線越過已確認嘴區；不擴張到鼻下或下巴')
+        hard=(hard*safe).astype(np.uint8)
+        # Smooth clipping: fade to zero over feather_px INSIDE the safe box so
+        # a clipped lip never shows a hard seam, and nothing outside changes.
+        inside=cv2.distanceTransform(np.pad(safe.astype(np.uint8),1),cv2.DIST_L2,cv2.DIST_MASK_PRECISE)[1:-1,1:-1]
+        edge=np.clip(inside/feather_px,0,1);edge=edge*edge*(3-2*edge)
+        if overflow:alpha=np.minimum(alpha,edge)
         alpha*=safe;allowed&=safe
     inner=np.zeros(shape,np.uint8)
     if geometry.get('inner'):

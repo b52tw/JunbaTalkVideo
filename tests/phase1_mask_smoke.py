@@ -5,8 +5,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'local'))
 
 def main():
     import cv2,numpy as np
-    from semantic_mouth import locate_mouth,edge_face_anchors,heatmap_reliability,style_profile,prepare_face,ContourNotReliable,geometry,union_geometry
-    from contour_mask import masks,overlay,ContourTracker
+    from semantic_mouth import locate_mouth,edge_face_anchors,heatmap_reliability,style_profile,prepare_face,ContourNotReliable,geometry,union_geometry,box_pixels
+    from contour_mask import masks,overlay,ContourTracker,safe_region
     from quality import blend_mouth
     p=argparse.ArgumentParser();p.add_argument('--out',required=True);p.add_argument('--baseline-source');a=p.parse_args()
     out=Path(a.out);out.mkdir(parents=True,exist_ok=True)
@@ -48,6 +48,19 @@ def main():
     united=masks(union_geometry(crescent,crescent),face,320,256,4)
     x1,y1,_,_=united['roi']
     assert united['alpha'][round(.52*256)-y1,160-x1,0]==0,'smile concavity bridged into skin below nose'
+    # v0.8.3b: small overflow past the confirmed mouth box is clipped, not fatal.
+    gx=[[.40,.47],[.50,.42],[.60,.47],[.60,.53],[.50,.56],[.40,.53]]
+    tight=[.39,.44,.22,.10]
+    clipped=masks(geometry(gx,[],'test'),face,320,256,4,tight)
+    cx1,cy1,cx2,cy2=clipped['roi'];bx1,by1,bx2,by2=safe_region(tight,320,256,clipped['roi']);ox1,oy1,_,_=box_pixels(tight,320,256);assert by1==oy1,'mouth box must never extend upward toward the nose'
+    outside=np.ones(clipped['alpha'].shape[:2],bool);outside[by1-cy1:by2-cy1,bx1-cx1:bx2-cx1]=False
+    assert not np.any(clipped['alpha'][:,:,0][outside]>0),'clipped mask leaked outside confirmed mouth box'
+    assert np.any(clipped['hard']>0)
+    assert clipped['alpha'].max()<=1 and clipped['alpha'].min()>=0
+    rejected_far=False
+    try:masks(geometry([[.40,.60],[.50,.58],[.60,.60],[.60,.66],[.50,.69],[.40,.66]],[],'test'),face,320,256,4,tight)
+    except ContourNotReliable:rejected_far=True
+    assert rejected_far,'contour mostly outside the mouth box must be rejected'
     for _ in range(5):tracker.update(None)
     try:tracker.update(None)
     except ContourNotReliable:pass
