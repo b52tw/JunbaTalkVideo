@@ -22,10 +22,10 @@ def main():
         except Exception as e:
             from inference_backend import fault
             fault(cfg,emit,'IR_cache',e,'IR 轉換程序結束後改直接 ONNX CPU；下階段另開程序')
-            fallback_path.write_text(json.dumps(dict(run_id=cfg.get('run_id','direct'),runtime='openvino_onnx_cpu',device='CPU',npu_assist=False)))
+            fallback_path.write_text(json.dumps(dict(run_id=cfg.get('run_id','direct'),runtime='openvino_onnx_cpu',device='CPU',npu_assist=False)),encoding='utf-8')
         return
     if fallback_path.exists():
-        fallback=json.loads(fallback_path.read_text())
+        fallback=json.loads(fallback_path.read_text(encoding='utf-8'))
         if fallback['run_id']==cfg.get('run_id','direct'):cfg.update(fallback)
 
     folder=Path(cfg['output']).parent;cache=folder/'stage-cache';cache.mkdir(exist_ok=True)

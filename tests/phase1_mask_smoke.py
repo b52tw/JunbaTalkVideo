@@ -55,7 +55,7 @@ def main():
     blink_unchanged=None
     if a.baseline_source:
         with zipfile.ZipFile(a.baseline_source) as z:old=ast.parse(z.read('local/quality.py').decode())
-        new=ast.parse((Path(__file__).resolve().parents[1]/'local/quality.py').read_text())
+        new=ast.parse((Path(__file__).resolve().parents[1]/'local/quality.py').read_text(encoding='utf-8'))
         def funcs(tree):return {n.name:ast.dump(n,include_attributes=False) for n in tree.body if isinstance(n,ast.FunctionDef)}
         old,new=funcs(old),funcs(new)
         for name in ('blink_starts','blink_amount','animate_eye','photo_motion'):assert old[name]==new[name],name+' changed'
@@ -65,7 +65,7 @@ def main():
     report=dict(ok=True,synthetic_frames=1,neural_weights_loaded=False,no_five_point_output=True,
                 feather_outside_zero=[3,4,5],outside_pixels_identical=True,eyes_identical=True,
                 blink_functions_unchanged=blink_unchanged,real_detail_strength=.35,cartoon_real_detail=False)
-    (out/'smoke.json').write_text(json.dumps(report,indent=2))
+    (out/'smoke.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     print(json.dumps(report))
 
 if __name__=='__main__':main()

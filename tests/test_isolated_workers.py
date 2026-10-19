@@ -24,7 +24,7 @@ class IsolatedWorkers(unittest.TestCase):
     def test_face_worker_rejects_blank_image_without_guessing(self):
         out=self.root/'五官偵測';out.mkdir()
         ok,b=cv2.imencode('.png',np.full((320,320,3),127,np.uint8));(out/'空白.png').write_bytes(b.tobytes())
-        config=out/'設定.json';config.write_text(json.dumps({'source':str(out/'空白.png'),'kind':'photo','models':str(out),'result':str(out/'result.json'),'device':'CPU'}))
+        config=out/'設定.json';config.write_text(json.dumps({'source':str(out/'空白.png'),'kind':'photo','models':str(out),'result':str(out/'result.json'),'device':'CPU'}),encoding='utf-8')
         p=subprocess.run([sys.executable,'-I',str(self.scripts/'face_worker.py'),'--config',str(config)],cwd=self.cwd,capture_output=True,text=True,timeout=30)
         self.assertNotEqual(p.returncode,0);self.assertIn('未找到可靠的真人臉',p.stdout);self.assertFalse((out/'result.json').exists())
     def test_all_body_modes_render_in_isolated_runtime(self):
@@ -36,7 +36,7 @@ class IsolatedWorkers(unittest.TestCase):
         patch=np.full((256,256,3),110,np.uint8)
         for i in range(8):
             ok,b=cv2.imencode('.png',patch);(cache/f'{i:05d}.png').write_bytes(b.tobytes())
-        (output/'mouth-cache.json').write_text(json.dumps({'frames':8,'fps':6,'width':128,'height':192,'actual':{}}))
+        (output/'mouth-cache.json').write_text(json.dumps({'frames':8,'fps':6,'width':128,'height':192,'actual':{}}),encoding='utf-8')
         samples=(np.sin(np.arange(21333)*2*np.pi*440/16000)*8000).astype('<i2')
         with wave.open(str(output/'語音.wav'),'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000);f.writeframes(samples.tobytes())
         for mode in ('','breathe','sway','nod','hand'):

@@ -33,5 +33,5 @@ def main():
         with wave.open(str(wav),'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000);f.writeframes((np.sin(np.arange(640)*2*np.pi*160/16000)*4000).astype('<i2').tobytes())
         drive=audio_drive(wav);assert np.all(np.isfinite(drive)) and np.all((drive>=0)&(drive<=5));checks['short_dummy_audio_damping']=True
     report=dict(ok=True,real_model_weights_loaded=False,synthetic_frames=1,checks=checks)
-    target=Path(a.output);target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps(report,ensure_ascii=False))
+    target=Path(a.output);target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps(report,ensure_ascii=False))
 if __name__=='__main__':main()

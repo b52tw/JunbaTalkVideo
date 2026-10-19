@@ -11,7 +11,7 @@ class WindowsDependencies(unittest.TestCase):
         from packaging.utils import canonicalize_name
         from packaging.markers import default_environment
         folder=Path(os.environ['JUNBA_TEST_WINDOWS_WHEELS'])
-        rows=json.loads((Path(__file__).resolve().parents[1]/'local/sadtalker_wheels.json').read_text())
+        rows=json.loads((Path(__file__).resolve().parents[1]/'local/sadtalker_wheels.json').read_text(encoding='utf-8'))
         packages={};requirements=[]
         for row in rows:
             p=folder/row['name'];h=hashlib.sha256()

@@ -24,4 +24,4 @@ for p in outputs:
     with p.open('rb') as f:
         for b in iter(lambda:f.read(1048576),b''):h.update(b)
     rows.append(dict(name=p.name,size=p.stat().st_size,sha256=h.hexdigest()))
-(DIST/'SHA256.json').write_text(json.dumps(rows,indent=2)+'\n');print(json.dumps(rows,indent=2))
+(DIST/'SHA256.json').write_text(json.dumps(rows,indent=2)+'\n',encoding='utf-8');print(json.dumps(rows,indent=2))

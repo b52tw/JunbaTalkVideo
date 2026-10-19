@@ -16,7 +16,7 @@ def main():
             except subprocess.CalledProcessError as e:
                 from inference_backend import fault
                 fault(cfg,emit,'sad_conversion',e,'短命轉換程序已退出；改獨立 PyTorch CPU 渲染')
-                cfg.update(runtime='torch',device='CPU');path=work/'cpu-fallback-config.json';path.write_text(json.dumps(cfg));a.config=str(path)
+                cfg.update(runtime='torch',device='CPU');path=work/'cpu-fallback-config.json';path.write_text(json.dumps(cfg),encoding='utf-8');a.config=str(path)
         child('sad_worker.py',a.config,'--stage','keypoints');child('sad_worker.py',a.config,'--stage','infer');child('renderer.py',str(work/'compose-config.json'));return
     import numpy as np,cv2
     if a.stage!='infer' or cfg.get('runtime')=='torch':
@@ -51,7 +51,7 @@ def main():
         import src.generate_batch as batch_module
         from quality import blink_amount
         from src.test_audio2coeff import Audio2Coeff
-        state=json.loads(state_path.read_text());batch_module.generate_blink_seq_randomly=lambda n:np.array([[blink_amount(i/25,cfg.get('blink_profile','bezier'))] for i in range(n)]);batch=batch_module.get_data(state['coeff'],cfg['audio'],'cpu',None);state['motion']=Audio2Coeff(paths,'cpu').generate(batch,str(work),cfg.get('pose_style',0),None);state_path.write_text(json.dumps(state))
+        state=json.loads(state_path.read_text(encoding='utf-8'));batch_module.generate_blink_seq_randomly=lambda n:np.array([[blink_amount(i/25,cfg.get('blink_profile','bezier'))] for i in range(n)]);batch=batch_module.get_data(state['coeff'],cfg['audio'],'cpu',None);state['motion']=Audio2Coeff(paths,'cpu').generate(batch,str(work),cfg.get('pose_style',0),None);state_path.write_text(json.dumps(state),encoding='utf-8')
     elif a.stage=='keypoints':
         from types import SimpleNamespace
         import yaml,safetensors.torch
@@ -59,7 +59,7 @@ def main():
         from src.facerender.modules.mapping import MappingNet
         from src.facerender.modules.make_animation import keypoint_transformation
         from src.generate_facerender_batch import get_facerender_data
-        state=json.loads(state_path.read_text());config=yaml.safe_load(Path(paths['facerender_yaml']).read_text())
+        state=json.loads(state_path.read_text(encoding='utf-8'));config=yaml.safe_load(Path(paths['facerender_yaml']).read_text(encoding='utf-8'))
         kp=KPDetector(**config['model_params']['kp_detector_params'],**config['model_params']['common_params']).eval().requires_grad_(False)
         mapping=MappingNet(**config['model_params']['mapping_params']).eval().requires_grad_(False)
         with safetensors.safe_open(paths['checkpoint'],framework='pt',device='cpu') as f:weights={k[len('kp_extractor.'):]:f.get_tensor(k) for k in f.keys() if k.startswith('kp_extractor.')}
@@ -74,9 +74,9 @@ def main():
             values=np.lib.format.open_memmap(work/'driving.npy',mode='w+',dtype=np.float32,shape=(total,1,15,3))
             for i in range(total):values[i]=keypoint_transformation(canonical,engine.mapping(targets[:,i]))['value'].numpy()
             values.flush();np.save(work/'source-keypoints.npy',source.numpy());np.save(work/'image.npy',image.numpy())
-        state['frames']=total;state_path.write_text(json.dumps(state))
+        state['frames']=total;state_path.write_text(json.dumps(state),encoding='utf-8')
     else:
-        state=json.loads(state_path.read_text());total=state['frames'];actual={};runtime=cfg.get('runtime','openvino');model=None
+        state=json.loads(state_path.read_text(encoding='utf-8'));total=state['frames'];actual={};runtime=cfg.get('runtime','openvino');model=None
         image=np.load(work/'image.npy',mmap_mode='r');source=np.load(work/'source-keypoints.npy',mmap_mode='r');driving_points=np.load(work/'driving.npy',mmap_mode='r')
         if runtime!='torch':
             from sad_export import paths_for
@@ -90,7 +90,7 @@ def main():
             import torch,yaml,safetensors.torch
             torch.set_num_threads(min(4,max(1,int(cfg.get('threads',2)))))
             from src.facerender.modules.generator import OcclusionAwareSPADEGenerator
-            config=yaml.safe_load((Path(cfg['root'])/'src/config/facerender_still.yaml').read_text())
+            config=yaml.safe_load((Path(cfg['root'])/'src/config/facerender_still.yaml').read_text(encoding='utf-8'))
             generator=OcclusionAwareSPADEGenerator(**config['model_params']['generator_params'],**config['model_params']['common_params']).eval().requires_grad_(False)
             with safetensors.safe_open(str(Path(cfg['root'])/'checkpoints/SadTalker_V0.0.2_512.safetensors'),framework='pt',device='cpu') as f:weights={k[len('generator.'):]:f.get_tensor(k) for k in f.keys() if k.startswith('generator.')}
             generator.load_state_dict(weights);del weights;gc.collect();actual['sad_generator']=['PyTorch CPU fallback']
@@ -101,7 +101,7 @@ def main():
                 prediction=generator(torch.from_numpy(np.array(image)),kp_source={'value':torch.from_numpy(np.array(source))},kp_driving={'value':torch.from_numpy(np.array(driving))})['prediction'].cpu().numpy() if model is None else model([image,source,driving])[0]
                 patch=np.clip(np.rint(prediction[0].transpose(1,2,0)*255),0,255).astype(np.uint8)[:,:,::-1];write(str(folder/f'{i:05d}.png'),patch)
                 emit(stage='render',frame=i+1,total=total,eta=round((time.monotonic()-started)/(i+1)*(total-i-1)),actual=actual,message=f'SadTalker 512：{i+1}/{total}')
-        (work/'mouth-cache.json').write_text(json.dumps({'actual':actual,'frames':total,'fps':25,'width':state['width'],'height':state['height']}));compose=dict(cfg);compose.update(models=cfg.get('detail_models',''),source=str(work/'reference.png'),kind='photo',bbox=state['face'],mouth_box=state['mouth'],eye_boxes=cfg.get('eye_boxes') or state['eye_boxes'],runtime='openvino')
+        (work/'mouth-cache.json').write_text(json.dumps({'actual':actual,'frames':total,'fps':25,'width':state['width'],'height':state['height']}),encoding='utf-8');compose=dict(cfg);compose.update(models=cfg.get('detail_models',''),source=str(work/'reference.png'),kind='photo',bbox=state['face'],mouth_box=state['mouth'],eye_boxes=cfg.get('eye_boxes') or state['eye_boxes'],runtime='openvino')
         if cfg.get('composition_mode','mouth')=='full':compose.update(blink=False,gaze=False,body_motion='')
         (work/'compose-config.json').write_text(json.dumps(compose),encoding='utf-8')
     report_peak('sad_'+a.stage)

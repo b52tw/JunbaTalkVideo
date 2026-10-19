@@ -17,7 +17,7 @@ def main():
     cv2.setNumThreads(2)
     cfg=json.loads(Path(args.config).read_text(encoding='utf-8-sig'));process_policy(cfg)
     threads=2 if cfg.get('low_impact',True) else 4
-    target=Path(cfg['output']);meta=json.loads(target.with_name('mouth-cache.json').read_text())
+    target=Path(cfg['output']);meta=json.loads(target.with_name('mouth-cache.json').read_text(encoding='utf-8'))
     cache=target.with_name('mouth-cache');actual=meta['actual'];total=meta['frames'];fps=meta['fps'];w=meta['width'];h=meta['height']
     photo=cfg.get('kind')=='photo';flags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0
     if photo:first=cv2.imdecode(np.fromfile(cfg['source'],dtype=np.uint8),cv2.IMREAD_COLOR)

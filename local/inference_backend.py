@@ -13,7 +13,7 @@ class CPUFallbackRequired(RuntimeError):pass
 def request_cpu(cfg,emit,name,error,runtime=None):
     fault(cfg,emit,name,error,'此程序退出後，再由新程序以 CPU 重試；不在原 C++ arena 疊加模型')
     folder=Path(cfg['output']).parent;fallback=dict(run_id=cfg.get('run_id','direct'),runtime=runtime or cfg.get('runtime','openvino'),device='CPU',npu_assist=False,fallback_attempt=int(cfg.get('fallback_attempt',0))+1)
-    pending=folder/'backend-fallback.pending.json';pending.write_text(json.dumps(fallback));pending.replace(folder/'backend-fallback.json')
+    pending=folder/'backend-fallback.pending.json';pending.write_text(json.dumps(fallback),encoding='utf-8');pending.replace(folder/'backend-fallback.json')
     raise CPUFallbackRequired(str(error))
 
 class NativeModel:
@@ -83,7 +83,7 @@ class OrtModel:
             request_cpu(self.cfg,self.emit,self.name,e,'directml')
         if not self.reported:
             counts={}
-            for e in json.loads(Path(self.session.end_profiling()).read_text()):
+            for e in json.loads(Path(self.session.end_profiling()).read_text(encoding='utf-8')):
                 p=e.get('args',{}).get('provider')
                 if p:counts[p]=counts.get(p,0)+1
             self.actual[self.name]=[f'{p} ({n} 節點)' for p,n in counts.items()] or ['已推論，無 profiling 節點'];self.emit(stage='devices',actual=self.actual);self.reported=True

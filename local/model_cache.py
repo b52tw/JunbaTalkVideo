@@ -10,7 +10,7 @@ def cached_path(root,name):
     xml=folder/(name+'.xml');meta=folder/(name+'.json');binary=xml.with_suffix('.bin')
     stat=source.stat();key={'version':VERSION,'size':stat.st_size,'mtime':stat.st_mtime_ns}
     try:
-        saved=json.loads(meta.read_text())
+        saved=json.loads(meta.read_text(encoding='utf-8'))
         if saved['source']==key and xml.stat().st_size==saved['xml'] and binary.stat().st_size==saved['bin']:return xml
     except (OSError,ValueError,KeyError):pass
     return None
@@ -29,5 +29,5 @@ def prepare(root,emit):
         # OpenVINO XML does not contain the external BIN filename.
         os.replace(temp,final)
         key={'source':{'version':VERSION,'size':stat.st_size,'mtime':stat.st_mtime_ns},'xml':final.stat().st_size,'bin':final.with_suffix('.bin').stat().st_size}
-        meta=folder/(name+'.json');tmp=meta.with_suffix('.tmp');tmp.write_text(json.dumps(key));os.replace(tmp,meta)
+        meta=folder/(name+'.json');tmp=meta.with_suffix('.tmp');tmp.write_text(json.dumps(key),encoding='utf-8');os.replace(tmp,meta)
     emit(stage='completed',stage_name='cache',message='磁碟映射模型已備妥；釋放轉換程序')

@@ -18,4 +18,4 @@ for name in ('JunbaTalkVideo_v0.8_Source.zip','JunbaTalkVideo_v0.8_GitHub_Builde
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6,allowZip64=False) as z:
         for path,n in files:z.write(path,n)
     rows.append(dict(name=name,size=archive.stat().st_size,sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),files=len(files)))
-(out/'Source_SHA256.json').write_text(json.dumps(rows,indent=2)+'\n');print(json.dumps(rows,indent=2))
+(out/'Source_SHA256.json').write_text(json.dumps(rows,indent=2)+'\n',encoding='utf-8');print(json.dumps(rows,indent=2))
