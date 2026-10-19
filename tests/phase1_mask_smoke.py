@@ -74,6 +74,12 @@ def main():
     try:tracker.update(None)
     except ContourNotReliable:pass
     else:raise AssertionError('unbounded lost-contour fallback')
+    # v0.8.3b: with a confirmed-mouth envelope the render continues inside it.
+    from contour_mask import confirmed_envelope
+    env=confirmed_envelope(crescent,[.33,.48,.34,.22]);keep=ContourTracker(crescent,env)
+    for _ in range(9):g,status=keep.update(None)
+    assert status=='confirmed mouth envelope' and keep.fallback_frames==4 and g is env
+    m=masks(env,face,320,256,4,[.33,.48,.34,.22]);assert m['hard'].sum()>0
     blink_unchanged=None
     if a.baseline_source:
         with zipfile.ZipFile(a.baseline_source) as z:old=ast.parse(z.read('local/quality.py').decode())

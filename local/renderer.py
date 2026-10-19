@@ -37,11 +37,12 @@ def main():
         from contour_preflight import prepare_source
         contour_report=prepare_source(base,cfg,target.parent)
     if contour_report is not None:
-        from contour_mask import ContourTracker
+        from contour_mask import ContourTracker,confirmed_envelope
         from semantic_mouth import dynamic_geometry,union_geometry,ContourNotReliable
         if contour_report['source_size']!=[w,h]:raise ValueError('唇線暫存尺寸不符，請重建遮罩')
-        source_geometry=contour_report['mouth_geometry'];contour_tracker=ContourTracker(source_geometry)
+        source_geometry=contour_report['mouth_geometry']
         cfg['mouth_box']=contour_report['measured_mouth_box']
+        contour_tracker=ContourTracker(source_geometry,confirmed_envelope(source_geometry,cfg['mouth_box']))
         profile=contour_report['profile']
         cfg['real_detail']=profile['real_detail'];cfg['anime_detail']=profile['anime_detail'];cfg['detail_strength']=.35
         emit(stage='compose',message='唇線分層融合：'+profile['style_type']+'；修復強度 35%；眼框及眨眼排程不變')
@@ -90,8 +91,8 @@ def main():
                 try:found=dynamic_geometry(generated,cfg['bbox'],cfg['mouth_box'])
                 except ContourNotReliable:found=None
                 current_geometry,tracking_status=contour_tracker.update(found)
-                active_geometry=union_geometry(source_geometry,current_geometry)
-                if found is None:emit(stage='compose',message='動態唇線不足；暫沿用上一精確輪廓，連續逾 5 格會停止')
+                active_geometry=current_geometry if tracking_status=='confirmed mouth envelope' else union_geometry(source_geometry,current_geometry)
+                if found is None:emit(stage='compose',message='動態唇線不足；沿用上一精確輪廓'+('，此格改用已確認嘴區範圍' if tracking_status=='confirmed mouth envelope' else ''))
             if enhancer is not None:
                 if cfg.get('real_detail'):
                     x=cv2.resize(generated,(512,512),interpolation=cv2.INTER_CUBIC)
@@ -140,7 +141,10 @@ def main():
             if decoder.poll() is None:decoder.kill()
             decoder.wait()
     # Keep small lossless patches for recovery. No user files are changed.
-    emit(stage='done',actual=actual,message='精緻對嘴完成；原圖細節及片頭片尾已保留')
+    note=''
+    if contour_tracker is not None and contour_tracker.fallback_frames:
+        note=f'；其中 {contour_tracker.fallback_frames} 格動態唇線不足，已用確認嘴區範圍合成，請檢查這些畫面'
+    emit(stage='done',actual=actual,message='精緻對嘴完成；原圖細節及片頭片尾已保留'+note)
 if __name__=='__main__':
     try:main()
     except __import__('inference_backend').CPUFallbackRequired as e:emit(stage='fallback',message='退出修復後端，等待新 CPU 程序：'+str(e));sys.exit(75)

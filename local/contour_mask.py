@@ -66,15 +66,34 @@ def masks(geometry,face,width,height,feather_px=4,safety_box=None):
                 lips=hard-inner,allowed=allowed,roi=(x1,y1,x2,y2))
 
 class ContourTracker:
-    """At most one prior geometry; never smooth speech pixels or invent lost points."""
-    def __init__(self,initial):self.geometry=initial;self.misses=0
+    """At most one prior geometry; never smooth speech pixels or invent lost points.
+
+    v0.8.3b: generated (256 px, soft) mouths often lose a measurable lip edge
+    for several frames. With a ``fallback`` envelope (source lips + the
+    user-confirmed mouth box) the render continues inside that confirmed area
+    instead of aborting the whole video; without one the old hard stop remains.
+    """
+    def __init__(self,initial,fallback=None):
+        self.geometry=initial;self.misses=0;self.fallback=fallback;self.fallback_frames=0
     def update(self,candidate):
         if candidate is None:
             self.misses+=1
-            if self.misses>5:raise ContourNotReliable('連續多格無可靠動態唇線，停止輸出以免貼錯')
+            if self.misses>5:
+                if self.fallback is None:raise ContourNotReliable('連續多格無可靠動態唇線，停止輸出以免貼錯')
+                self.fallback_frames+=1
+                return self.fallback,'confirmed mouth envelope'
             return self.geometry,'previous precise contour'
         self.geometry=candidate;self.misses=0
         return candidate,'current contour'
+
+def confirmed_envelope(source,mouth_box):
+    """Source lip contour plus an ellipse inscribed in the confirmed mouth box."""
+    from semantic_mouth import geometry
+    x,y,w,h=map(float,mouth_box);t=np.linspace(0,2*np.pi,32,endpoint=False)
+    ellipse=np.c_[x+w/2+w*.48*np.cos(t),y+h/2+h*.48*np.sin(t)].clip(0,1).tolist()
+    result=geometry(source['outer'],source.get('inner',[]),'confirmed_mouth_envelope')
+    result['support_polygons']=[source['outer'],ellipse]
+    return result
 
 def overlay(image,geometry,face,feather_px=4,safety_box=None):
     result=masks(geometry,face,image.shape[1],image.shape[0],feather_px,safety_box)
