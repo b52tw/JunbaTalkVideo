@@ -701,12 +701,13 @@ func (a *App) localGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mem := memoryInfo()
-	minimum := uint64(6 << 30)
-	if q.Device == "CPU" && q.MemoryMode == "standard" {
-		minimum = 8 << 30
-	}
+	minimum := localMemoryMinimum(q.Device, q.MemoryMode)
 	if mem.Available > 0 && mem.Available < minimum {
-		fail(w, 409, fmt.Errorf("可用記憶體只有 %.1f GB，請先關閉其他程式，至少留 %.0f GB 再試。", float64(mem.Available)/(1<<30), float64(minimum)/(1<<30)))
+		hint := "請先關閉其他程式再試。"
+		if q.MemoryMode != "staged" {
+			hint = "可把「模型記憶體方式」改成「磁碟映射＋逐階段」，只需約 4.5 GB。"
+		}
+		fail(w, 409, fmt.Errorf("可用記憶體只有 %.1f GB，此模式至少需 %.1f GB。%s", float64(mem.Available)/(1<<30), float64(minimum)/(1<<30), hint))
 		return
 	}
 	a.localMu.Lock()
