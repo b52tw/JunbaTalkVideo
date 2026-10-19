@@ -69,9 +69,10 @@ class ContourTracker:
     """At most one prior geometry; never smooth speech pixels or invent lost points.
 
     v0.8.3b: generated (256 px, soft) mouths often lose a measurable lip edge
-    for several frames. With a ``fallback`` envelope (source lips + the
-    user-confirmed mouth box) the render continues inside that confirmed area
-    instead of aborting the whole video; without one the old hard stop remains.
+    for several frames. The render never stops for that: with a ``fallback``
+    envelope (source lips + the user-confirmed mouth box) it continues inside
+    that confirmed area, otherwise it keeps the last precise contour. Frames
+    are counted in ``fallback_frames`` and reported as a warning.
     """
     def __init__(self,initial,fallback=None):
         self.geometry=initial;self.misses=0;self.fallback=fallback;self.fallback_frames=0
@@ -79,8 +80,9 @@ class ContourTracker:
         if candidate is None:
             self.misses+=1
             if self.misses>5:
-                if self.fallback is None:raise ContourNotReliable('連續多格無可靠動態唇線，停止輸出以免貼錯')
+                # v0.8.3b: never stop the render for lost contours; record and continue.
                 self.fallback_frames+=1
+                if self.fallback is None:return self.geometry,'previous precise contour (warning)'
                 return self.fallback,'confirmed mouth envelope'
             return self.geometry,'previous precise contour'
         self.geometry=candidate;self.misses=0

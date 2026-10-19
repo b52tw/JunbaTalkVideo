@@ -70,10 +70,9 @@ def main():
     assert eye_box is not None,'cartoon eye not found below eyebrow'
     eye_cy=(eye_box[1]+eye_box[3]/2)*240
     assert 105<eye_cy<135,f'eye seed stayed on eyebrow ({eye_cy:.0f})'
-    for _ in range(5):tracker.update(None)
-    try:tracker.update(None)
-    except ContourNotReliable:pass
-    else:raise AssertionError('unbounded lost-contour fallback')
+    # v0.8.3b: lost contours never stop the render; they are counted as warnings.
+    for _ in range(8):g,status=tracker.update(None)
+    assert tracker.fallback_frames==3 and 'warning' in status
     # v0.8.3b: with a confirmed-mouth envelope the render continues inside it.
     from contour_mask import confirmed_envelope
     env=confirmed_envelope(crescent,[.33,.48,.34,.22]);keep=ContourTracker(crescent,env)

@@ -33,16 +33,28 @@ def main():
     if contour_file.is_file():
         candidate=json.loads(contour_file.read_text(encoding='utf-8'))
         if candidate.get('run_id')==cfg.get('run_id','direct'):contour_report=candidate
+    user_mouth_box=list(cfg['mouth_box']) if cfg.get('mouth_box') else None
+    box_fallback_frames=0
     if cfg.get('contour_mode',False) and contour_report is None:
         from contour_preflight import prepare_source
-        contour_report=prepare_source(base,cfg,target.parent)
+        try:contour_report=prepare_source(base,cfg,target.parent)
+        except Exception as e:
+            # v0.8.3b: no reliable source lip line -> feather the confirmed box.
+            contour_report=None
+            emit(stage='compose',message='警告：原圖唇線分析失敗（'+str(e)[:120]+'）；改用確認嘴框＋邊緣羽化合成')
     if contour_report is not None:
         from contour_mask import ContourTracker,confirmed_envelope
         from semantic_mouth import dynamic_geometry,union_geometry,ContourNotReliable
         if contour_report['source_size']!=[w,h]:raise ValueError('唇線暫存尺寸不符，請重建遮罩')
         source_geometry=contour_report['mouth_geometry']
         cfg['mouth_box']=contour_report['measured_mouth_box']
-        contour_tracker=ContourTracker(source_geometry,confirmed_envelope(source_geometry,cfg['mouth_box']))
+        if user_mouth_box:
+            # Envelope/safety area = measured lips UNION the user-confirmed box.
+            mx,my,mw,mh=cfg['mouth_box'];ux,uy,uw,uh=user_mouth_box
+            x0,y0=min(mx,ux),min(my,uy);x1_,y1_=max(mx+mw,ux+uw),max(my+mh,uy+uh)
+            user_mouth_box=[x0,y0,x1_-x0,y1_-y0]
+        else:user_mouth_box=list(cfg['mouth_box'])
+        contour_tracker=ContourTracker(source_geometry,confirmed_envelope(source_geometry,user_mouth_box))
         profile=contour_report['profile']
         cfg['real_detail']=profile['real_detail'];cfg['anime_detail']=profile['anime_detail'];cfg['detail_strength']=.35
         emit(stage='compose',message='唇線分層融合：'+profile['style_type']+'；修復強度 35%；眼框及眨眼排程不變')
@@ -86,10 +98,10 @@ def main():
                 frame=np.frombuffer(raw,dtype=np.uint8).reshape(h,w,3)
             generated=cv2.imdecode(np.fromfile(str(cache/f'{i:05d}.png'),dtype=np.uint8),cv2.IMREAD_COLOR)
             if generated is None:raise RuntimeError('嘴型暫存不完整，請重新生成')
-            active_geometry=None
+            active_geometry=None;tracking_status=''
             if contour_tracker is not None:
                 try:found=dynamic_geometry(generated,cfg['bbox'],cfg['mouth_box'])
-                except ContourNotReliable:found=None
+                except Exception:found=None  # any detection failure = lost contour, never fatal
                 current_geometry,tracking_status=contour_tracker.update(found)
                 active_geometry=current_geometry if tracking_status=='confirmed mouth envelope' else union_geometry(source_geometry,current_geometry)
                 if found is None:emit(stage='compose',message='動態唇線不足；沿用上一精確輪廓'+('，此格改用已確認嘴區範圍' if tracking_status=='confirmed mouth envelope' else ''))
@@ -112,13 +124,17 @@ def main():
                     generated=np.clip(base_detail+np.clip(residual,-18,18)*float(cfg.get('detail_strength',.5)),0,255).astype(np.uint8)
             motion_frame=torso.apply(i/fps) if torso is not None else frame
             blend_args=dict(blend=cfg.get('blend_mode','feather'),scope=cfg.get('mouth_scope','lips'),full=cfg.get('composition_mode')=='full',color_transfer=cfg.get('color_transfer',True),feather_px=contour_report['feather_px'] if contour_report else 4)
-            try:result=blend_mouth(motion_frame,generated,cfg['bbox'],cfg.get('mouth_box'),mouth_geometry=active_geometry,**blend_args)
-            except ContourNotReliable:
-                # v0.8.3b: one bad dynamic contour must not abort the whole video.
-                # Fall back to the user-confirmed source lip contour for this frame.
-                if active_geometry is None or source_geometry is None:raise
-                emit(stage='compose',message=f'第 {i+1} 格動態唇線超出嘴區；此格改用原圖精確唇線')
-                result=blend_mouth(motion_frame,generated,cfg['bbox'],cfg.get('mouth_box'),mouth_geometry=source_geometry,**blend_args)
+            safety=user_mouth_box if tracking_status=='confirmed mouth envelope' else cfg.get('mouth_box')
+            result=None
+            # v0.8.3b fallback chain, never aborting the video:
+            # dynamic contour -> source contour -> confirmed box with feathering.
+            for label,geom,box in (('動態唇線',active_geometry,safety),('原圖精確唇線',source_geometry,cfg.get('mouth_box'))):
+                if geom is None:continue
+                try:result=blend_mouth(motion_frame,generated,cfg['bbox'],box,mouth_geometry=geom,**blend_args);break
+                except (ContourNotReliable,ValueError) as e:emit(stage='compose',message=f'警告：第 {i+1} 格{label}無法使用（{e}）')
+            if result is None:
+                if active_geometry is not None:box_fallback_frames+=1
+                result=blend_mouth(motion_frame,generated,cfg['bbox'],user_mouth_box or cfg.get('mouth_box'),mouth_geometry=None,**blend_args)
             if photo:result=photo_motion(result,cfg['bbox'],i/fps,cfg.get('eye_boxes',[]) if cfg.get('blink') or cfg.get('gaze') else [],cfg.get('gaze',False),cfg.get('micro_motion',False),cfg.get('blink',False),'' if cfg.get('body_motion')=='speech' else cfg.get('body_motion',''),cfg.get('hand_box',[]),cfg.get('blink_profile','bezier'),cfg.get('brow_motion',False),cfg.get('lid_shadow',True))
             if i==0:
                 for k in range(lead_frames):
@@ -143,7 +159,10 @@ def main():
     # Keep small lossless patches for recovery. No user files are changed.
     note=''
     if contour_tracker is not None and contour_tracker.fallback_frames:
-        note=f'；其中 {contour_tracker.fallback_frames} 格動態唇線不足，已用確認嘴區範圍合成，請檢查這些畫面'
+        note+=f'；警告：{contour_tracker.fallback_frames} 格動態唇線不足，已用確認嘴區範圍合成'
+    if box_fallback_frames:
+        note+=f'；警告：{box_fallback_frames} 格改用確認嘴框＋邊緣羽化'
+    if note:note+='，請目視檢查'
     emit(stage='done',actual=actual,message='精緻對嘴完成；原圖細節及片頭片尾已保留'+note)
 if __name__=='__main__':
     try:main()

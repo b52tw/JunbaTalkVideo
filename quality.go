@@ -55,7 +55,9 @@ func shiftCaptions(dir string, delta float64) error {
 // Refresh bundled scripts at job start so an existing installation receives fixes
 // without downloading the large model weights again. Caller owns localJob slot.
 func (a *App) refreshLocalScripts() error {
-	for _, name := range []string{"stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz"} {
+	// v0.8.3b: include the Phase 1 contour modules; they were missing, so an
+	// existing install kept its first-installed copies and never got fixes.
+	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz"} {
 		b, e := localFiles.ReadFile("local/" + name)
 		if e != nil {
 			return e
