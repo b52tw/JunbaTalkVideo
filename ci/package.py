@@ -1,6 +1,6 @@
 import hashlib,json,shutil,zipfile
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1];DIST=ROOT/'dist';DIST.mkdir(exist_ok=True);VERSION='0.8.5'
+ROOT=Path(__file__).resolve().parents[1];DIST=ROOT/'dist';DIST.mkdir(exist_ok=True);VERSION='0.8.6'
 exe=DIST/f'JunbaTalkVideo_v{VERSION}.exe';shutil.copyfile(ROOT/'JunbaTalkVideo.exe',exe)
 def docs(folder):
     folder.mkdir(exist_ok=True,parents=True);shutil.copyfile(exe,folder/'JunbaTalkVideo.exe')

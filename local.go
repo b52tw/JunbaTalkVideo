@@ -748,9 +748,13 @@ func (a *App) localGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mem := memoryInfo()
-	minimum := localMemoryMinimum(q.Device, q.MemoryMode)
+	minimum, recommended := localMemoryGate(q.Engine, q.Device, q.MemoryMode)
+	lowMemoryWarning := ""
+	if mem.Available > 0 && mem.Available >= minimum && mem.Available < recommended {
+		lowMemoryWarning = fmt.Sprintf("提醒：可用記憶體 %.1f GB，低於建議的 %.1f GB；仍會執行，但可能較慢或自動改用 CPU。", float64(mem.Available)/(1<<30), float64(recommended)/(1<<30))
+	}
 	if mem.Available > 0 && mem.Available < minimum {
-		hint := "請先關閉其他程式再試。"
+		hint := "請先關閉其他程式再試；卡通素材可改用「卡通原圖唇形擺動」，只需約 1 GB。"
 		if q.MemoryMode != "staged" {
 			hint = "可把「模型記憶體方式」改成「磁碟映射＋逐階段」，只需約 4.5 GB。"
 		}
@@ -833,6 +837,9 @@ func (a *App) localGenerate(w http.ResponseWriter, r *http.Request) {
 	j.Message = "準備在本機執行 MuseTalk；首次編譯可能需要數分鐘。"
 	if q.Engine == "puppet" {
 		j.Message = "準備卡通原圖唇形擺動（不使用 AI 模型）。"
+	}
+	if lowMemoryWarning != "" {
+		j.Message += lowMemoryWarning
 	}
 	j.Format, j.Aspect, j.Resolution = normalizeExport(q.Format, q.Aspect, q.Resolution)
 	j.CaptionMode = captionMode(q.CaptionMode)

@@ -1,21 +1,31 @@
 package main
 
-// localMemoryMinimum is the available-RAM gate before a local render starts.
+// localMemoryGate returns the available-RAM gates before a local render.
 //
-// v0.8.3b: the staged (disk-mapped, one stage per process) mode runs stages
-// sequentially and each previous process exits before the next starts. Field
-// reports show the largest stage (mouth inference) peaks at ~3.9 GiB private
-// commit while every other stage stays under 1 GiB, and each stage is capped by
-// a 4 GiB job budget. Requiring 6 GiB for that mode forced users to close every
-// other program, so staged mode now needs 4.5 GiB (4 GiB stage cap + headroom).
-// The two-stage "standard" mode keeps the original, stricter gates.
-func localMemoryMinimum(device, memoryMode string) uint64 {
+//   - hard: below this the render is refused (it would almost surely fail).
+//   - recommended: below this the render still starts, with a warning.
+//
+// v0.8.3b: the staged (disk-mapped, one stage per process) MuseTalk mode runs
+// stages sequentially; the largest stage (mouth inference) peaks at ~3.9 GiB
+// private commit under a 4 GiB per-stage budget, so 4.5 GiB is recommended.
+// v0.8.5: between 3 and 4.5 GiB it now starts with a warning instead of being
+// refused, and the cartoon lip puppet (no neural model, measured peak ~0.4 GiB
+// at 1920 px with head/body motion) only needs 1 GiB.
+func localMemoryGate(engine, device, memoryMode string) (hard, recommended uint64) {
 	switch {
+	case engine == "puppet":
+		return 1 << 30, 1 << 30
 	case memoryMode == "staged":
-		return 4608 << 20 // 4.5 GiB
+		return 3 << 30, 4608 << 20
 	case device == "CPU":
-		return 8 << 30
+		return 8 << 30, 8 << 30
 	default:
-		return 6 << 30
+		return 6 << 30, 6 << 30
 	}
+}
+
+// localMemoryMinimum is kept for callers/tests that need the recommended gate.
+func localMemoryMinimum(device, memoryMode string) uint64 {
+	_, rec := localMemoryGate("musetalk", device, memoryMode)
+	return rec
 }
