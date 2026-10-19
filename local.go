@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 //go:embed local/*.py local/*.npz local/*.json local/*.txt local/*.zip local/*.whl local/*.onnx
@@ -322,7 +323,7 @@ func (a *App) installModelSet(models []LocalModel, marker, value string) error {
 		}
 
 	}
-	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "cartoon_puppet.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz", "requirements.txt"} {
+	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "cartoon_puppet.py", "puppet_motion.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz", "requirements.txt"} {
 		b, _ := localFiles.ReadFile("local/" + name)
 		if e := os.WriteFile(filepath.Join(dir, name), b, 0600); e != nil {
 			return e
@@ -489,20 +490,24 @@ func (a *App) downloadArtifact(ctx context.Context, m LocalModel, dir string) er
 }
 
 type LocalRequest struct {
-	ColorTransfer   *bool   `json:"color_transfer"`
-	LidShadow       *bool   `json:"lid_shadow"`
-	PeakBudgetMB    int     `json:"peak_budget_mb"`
-	Runtime         string  `json:"runtime"`
-	DMLAdapter      int     `json:"dml_adapter"`
-	NPUAssist       bool    `json:"npu_assist"`
-	BlendMode       string  `json:"blend_mode"`
-	MouthScope      string  `json:"mouth_scope"`
-	ComposeStyle    string  `json:"compose_style"`
-	PuppetStyle     string  `json:"puppet_style"`
-	PuppetOpen      float64 `json:"puppet_open"`
-	CompositionMode string  `json:"composition_mode"`
-	BlinkProfile    string  `json:"blink_profile"`
-	BrowMotion      bool    `json:"brow_motion"`
+	ColorTransfer   *bool        `json:"color_transfer"`
+	LidShadow       *bool        `json:"lid_shadow"`
+	PeakBudgetMB    int          `json:"peak_budget_mb"`
+	Runtime         string       `json:"runtime"`
+	DMLAdapter      int          `json:"dml_adapter"`
+	NPUAssist       bool         `json:"npu_assist"`
+	BlendMode       string       `json:"blend_mode"`
+	MouthScope      string       `json:"mouth_scope"`
+	ComposeStyle    string       `json:"compose_style"`
+	PuppetStyle     string       `json:"puppet_style"`
+	PuppetOpen      float64      `json:"puppet_open"`
+	HeadMotion      string       `json:"head_motion"`
+	BodyAmp         string       `json:"body_amp"`
+	MotionTimeline  string       `json:"motion_timeline"`
+	Speakers        []SpeakerBox `json:"speakers,omitempty"`
+	CompositionMode string       `json:"composition_mode"`
+	BlinkProfile    string       `json:"blink_profile"`
+	BrowMotion      bool         `json:"brow_motion"`
 
 	Engine          string  `json:"engine"`
 	PoseStyle       int     `json:"pose_style"`
@@ -598,6 +603,24 @@ func validateLocal(q *LocalRequest) error {
 	}
 	if math.IsNaN(q.PuppetOpen) || q.PuppetOpen < .25 || q.PuppetOpen > .9 {
 		return errors.New("張嘴幅度需介於 0.25 至 0.9")
+	}
+	if q.HeadMotion == "" {
+		q.HeadMotion = "off"
+	}
+	if q.HeadMotion != "off" && q.HeadMotion != "small" && q.HeadMotion != "medium" && q.HeadMotion != "large" {
+		return errors.New("無效頭部動作幅度")
+	}
+	if q.BodyAmp == "" {
+		q.BodyAmp = "small"
+	}
+	if q.BodyAmp != "small" && q.BodyAmp != "medium" && q.BodyAmp != "large" {
+		return errors.New("無效身體動作幅度")
+	}
+	if utf8.RuneCountInString(q.MotionTimeline) > 1000 {
+		return errors.New("動作時間軸最多 1000 字")
+	}
+	if e := validateSpeakers(q.Speakers); e != nil {
+		return e
 	}
 	if q.CompositionMode != "mouth" && q.CompositionMode != "full" {
 		return errors.New("無效合成模式")
@@ -845,6 +868,11 @@ func (a *App) runLocal(ctx context.Context, q LocalRequest) {
 	}
 	cfg := map[string]any{"models": filepath.Join(a.localDir(), "models"), "device": q.Device, "audio": filepath.Join(dir, j.Audio), "source": filepath.Join(dir, j.Source), "output": filepath.Join(dir, "video.mp4"), "ffmpeg": engine, "kind": j.Kind, "bbox": q.BBox, "fps": q.FPS, "max_side": q.MaxSide, "mouth_box": q.MouthBox, "eye_boxes": q.EyeBoxes, "blink": q.Blink, "gaze": q.Gaze, "micro_motion": q.MicroMotion, "lead": j.LeadSeconds, "tail": j.LeadSeconds, "anime_detail": q.AnimeDetail, "body_motion": q.BodyMotion, "hand_box": q.HandBox, "run_id": randomID(), "low_impact": q.ResourceMode != "normal", "real_detail": q.RealDetail, "detail_strength": q.DetailStrength}
 	v08Config(cfg, q)
+	if d := filepath.Join(dir, "dialogue.json"); q.Engine == "puppet" {
+		if _, e := os.Stat(d); e == nil {
+			cfg["dialogue"] = d
+		}
+	}
 	b, _ := json.MarshalIndent(cfg, "", "  ")
 	if e = os.WriteFile(filepath.Join(dir, "local-config.json"), b, 0600); e != nil {
 		a.update(q.ID, "error", e.Error())

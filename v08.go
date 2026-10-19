@@ -44,6 +44,12 @@ func v08Config(cfg map[string]any, q LocalRequest) {
 	cfg["engine"] = q.Engine
 	cfg["puppet_style"] = q.PuppetStyle
 	cfg["puppet_open"] = q.PuppetOpen
+	cfg["head_motion"] = q.HeadMotion
+	cfg["body_amp"] = q.BodyAmp
+	cfg["motion_timeline"] = q.MotionTimeline
+	if len(q.Speakers) > 0 {
+		cfg["speakers"] = q.Speakers
+	}
 	cfg["composition_mode"] = q.CompositionMode
 	cfg["blink_profile"] = q.BlinkProfile
 	cfg["brow_motion"] = q.BrowMotion

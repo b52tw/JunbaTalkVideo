@@ -66,4 +66,40 @@ class RenderFallback(unittest.TestCase):
                 self.assertIn('卡通原圖唇形擺動',p.stdout)
                 self.assertTrue((d/'local-render.mp4').exists() or (d/(style+'.mp4')).exists())
 
+    def test_puppet_dialogue_two_speakers_with_motion(self):
+        ffmpeg=shutil.which('ffmpeg')
+        if not ffmpeg:self.skipTest('FFmpeg required')
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp)
+            img=np.full((360,640,3),(150,185,235),np.uint8)
+            for cx in (160,480):
+                cv2.circle(img,(cx,170),80,(120,170,230),-1)
+                cv2.ellipse(img,(cx,215),(40,14),0,0,180,(40,30,120),-1)
+                cv2.rectangle(img,(cx-35,215),(cx+35,223),(245,245,245),-1)
+            cv2.imwrite(str(d/'src.png'),img)
+            s=(np.sin(np.arange(64000)*2*np.pi*220/16000)*(np.arange(64000)%8000<4000)*8000).astype('<i2')
+            with wave.open(str(d/'a.wav'),'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000);f.writeframes(s.tobytes())
+            (d/'dialogue.json').write_text(json.dumps({'lines':[{'speaker':'A','han_text':'大家好','start':0,'end':1.5,'actions':['nod','sway']},
+                {'speaker':'B','han_text':'你好','start':1.7,'end':3,'actions':['tilt','brow']},{'speaker':'A','han_text':'再見','start':3.1,'end':4}],'names':{}}),encoding='utf-8')
+            fa=[.125,.25,.25,.5];fb=[.625,.25,.25,.5];ma=[.19,.56,.13,.08];mb=[.69,.56,.13,.08]
+            cfg=dict(source=str(d/'src.png'),audio=str(d/'a.wav'),output=str(d/'out.mp4'),ffmpeg=ffmpeg,kind='photo',device='CPU',engine='puppet',
+                     puppet_style='smooth',puppet_open=.55,fps=12,max_side=640,bbox=fa,mouth_box=ma,eye_boxes=[],lead=.2,tail=.2,run_id='d',
+                     head_motion='large',body_amp='large',motion_timeline='2 點頭',dialogue=str(d/'dialogue.json'),
+                     speakers=[dict(id='A',mouth_box=ma,face_box=fa),dict(id='B',mouth_box=mb,face_box=fb)])
+            (d/'cfg.json').write_text(json.dumps(cfg),encoding='utf-8')
+            p=subprocess.run([sys.executable,'-I',str(ROOT/'local/renderer.py'),'--config',str(d/'cfg.json')],
+                             capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=180)
+            self.assertEqual(p.returncode,0,p.stdout[-1500:]+p.stderr[-1500:])
+            self.assertIn('多人對話：A、B',p.stdout)
+            self.assertIn('頭部動作：large；2 人',p.stdout)
+
+    def test_motion_off_leaves_frames_identical(self):
+        import sys as _s;_s.path.insert(0,str(ROOT/'local'))
+        from puppet_motion import motion_curves,body_sway_curve,parse_timeline
+        level=np.abs(np.sin(np.arange(100)/7)).astype(np.float32)
+        a,n,s_,b=motion_curves(level,25,'off',(),continuous=False)
+        self.assertEqual(float(np.abs(a).max()+np.abs(n).max()+np.abs(s_).max()+b.max()),0.0)
+        self.assertEqual(float(np.abs(body_sway_curve(level,25,'small',(),continuous=False)).max()),0.0)
+        self.assertEqual(parse_timeline('1-3 點頭\nB 6-8 側傾\nxx')[1][:2],('B',6.0))
+
 if __name__=='__main__':unittest.main()

@@ -28,9 +28,9 @@ def audio_drive(audio_path):
     return np.asarray(result,np.float32)
 
 class TorsoMotion:
-    def __init__(self,source,face,drive=None,alpha=None):
+    def __init__(self,source,face,drive=None,alpha=None,scale=1.0):
         from scipy.ndimage import distance_transform_edt
-        self.base=source;self.face=face;self.drive=drive if drive is not None else np.zeros(1);self.ready=False;h,w=source.shape[:2]
+        self.scale=float(scale);self.base=source;self.face=face;self.drive=drive if drive is not None else np.zeros(1);self.ready=False;h,w=source.shape[:2]
         if alpha is None:
             scale=min(1.,512/max(h,w));small=cv2.resize(source,(max(2,round(w*scale)),max(2,round(h*scale))))
             sh,sw=small.shape[:2];x,y,bw,bh=face;x1=max(1,int((x-.8*bw)*sw));y1=max(1,int((y-.2*bh)*sh));x2=min(sw-1,int((x+1.8*bw)*sw));y2=sh-1
@@ -55,7 +55,7 @@ class TorsoMotion:
         if not self.ready:return self.base
         h,w=self.base.shape[:2];accent=float(self.drive[min(len(self.drive)-1,max(0,int(t*50)))])
         breath=4.*np.sin(2*np.pi*t/3.6);field=self.neck*self.safe
-        dy=np.clip(breath+.65*accent,-5,5)*field;dx=np.clip((self.xx-w*.5)*.0007*np.sin(2*np.pi*t/3.6)+.30*accent,-3,3)*field
+        k=self.scale;dy=np.clip((breath+.65*accent)*k,-5*k,5*k)*field;dx=np.clip(((self.xx-w*.5)*.0007*np.sin(2*np.pi*t/3.6)+.30*accent)*k,-3*k,3*k)*field
         if np.max(np.abs(dy)+np.abs(dx))<1e-5:return self.base
         mx=(self.xx-dx).astype(np.float32);my=(self.yy-dy).astype(np.float32);a=cv2.remap(self.alpha,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
         prem=cv2.remap(self.base.astype(np.float32)*self.alpha[:,:,None],mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)

@@ -46,10 +46,38 @@ def main():
             x,y,bw_,bh_=cfg['mouth_box'];t=np.linspace(0,2*np.pi,32,endpoint=False)
             outer=np.c_[x+bw_/2+bw_*.48*np.cos(t),y+bh_/2+bh_*.48*np.sin(t)].tolist()
             emit(stage='compose',message='警告：原圖唇線不清楚（'+str(e)[:80]+'）；改用確認嘴框推估上下唇')
-        puppet=CartoonPuppet(base,outer,max_open=float(cfg.get('puppet_open',.55)))
         shapes=cfg.get('puppet_style','smooth')=='shapes'
         puppet_track=viseme_track(cfg['audio'],fps) if shapes else [(float(v),0.) for v in mouth_drive(cfg['audio'],fps)]
         total=len(puppet_track);actual={'cartoon_puppet':['CPU / '+('五種口型切換' if shapes else '連續開合')]}
+        # v0.8.5 multi-speaker dialogue: one puppet per speaker mouth, each
+        # driven only during that speaker's segments.
+        from puppet_motion import speaker_masks
+        dialogue=[]
+        if cfg.get('dialogue') and Path(cfg['dialogue']).is_file():
+            dialogue=json.loads(Path(cfg['dialogue']).read_text(encoding='utf-8')).get('lines',[])
+        speakers=[s for s in (cfg.get('speakers') or []) if s.get('mouth_box')]
+        if not speakers:speakers=[dict(id='A',mouth_box=outer,face_box=cfg['bbox'],_outer=outer)]
+        masks=speaker_masks(dialogue,total,fps) if dialogue else {}
+        puppets=[]
+        for sp in speakers:
+            sid=str(sp.get('id','A')).upper()
+            if sp.get('_outer'):sp_outer=sp['_outer']
+            elif sid=='A' and sp.get('mouth_box')==cfg.get('mouth_box'):sp_outer=outer
+            else:
+                try:sp_outer=locate_mouth(base,dict(cfg,landmarks=[],mouth_box=sp['mouth_box']))['outer']
+                except Exception:
+                    x,y,bw_,bh_=sp['mouth_box'];t=np.linspace(0,2*np.pi,32,endpoint=False)
+                    sp_outer=np.c_[x+bw_/2+bw_*.48*np.cos(t),y+bh_/2+bh_*.48*np.sin(t)].tolist()
+                    emit(stage='compose',message=f'警告：說話者 {sid} 唇線不清楚；改用嘴框推估')
+            try:rig=CartoonPuppet(base,sp_outer,max_open=float(cfg.get('puppet_open',.55)))
+            except Exception as e:
+                emit(stage='compose',message=f'警告：說話者 {sid} 嘴部無法變形（{e}）；此人保持原圖');continue
+            mask=masks.get(sid) if dialogue else None
+            if dialogue and mask is None:mask=np.zeros(total,np.float32)
+            puppets.append((sid,rig,mask,sp.get('face_box') or (cfg['bbox'] if sid=='A' else None)))
+        if dialogue:emit(stage='compose',message='多人對話：'+'、'.join(p[0] for p in puppets)+f'；共 {len(dialogue)} 段台詞')
+        if not puppets:raise RuntimeError('無法建立任何說話者的嘴部變形；請重新框選嘴巴')
+        puppet=puppets[0][1]
         emit(stage='compose',actual=actual,message='卡通原圖唇形擺動：'+('B 口型切換（閉／半開／大開／圓唇／咧嘴）' if shapes else 'A 連續開合')+'；不使用 AI 重繪')
     contour_report=None;contour_tracker=None;source_geometry=None
     contour_file=target.with_name('mouth-contour.json')
@@ -120,9 +148,35 @@ def main():
     torso=None
     if photo and cfg.get('body_motion')=='speech':
         from body_motion import TorsoMotion,audio_drive
-        torso=TorsoMotion(base,cfg['bbox'],audio_drive(cfg['audio']))
+        torso=TorsoMotion(base,cfg['bbox'],audio_drive(cfg['audio']),scale={'small':1.0,'medium':1.6,'large':2.3}.get(cfg.get('body_amp','small'),1.0))
         actual['torso_motion']=['CPU / GrabCut + RMS/Pitch damping' if torso.ready else '未套用：無可靠人物遮罩']
         emit(stage='compose' if torso.ready else 'fallback',message='肩膀：GrabCut 前景＋呼吸／語音阻尼，背景鎖定' if torso.ready else '無可靠人物遮罩，保留原姿勢；不拉伸背景')
+    # v0.8.5 head / brow motion (photos). Head moves last so blink, mouth and
+    # brows travel with it; brows only on the lip-puppet path.
+    head_rigs=[];body_rigs=[];brow_rig=None;brow_curve=None
+    head_amp=cfg.get('head_motion','off')
+    tagged=[]
+    if puppet_mode and dialogue:
+        from puppet_motion import dialogue_actions
+        tagged=dialogue_actions(dialogue)
+    if photo and (head_amp!='off' or cfg.get('motion_timeline') or tagged):
+        from puppet_motion import HeadRig,BrowRig,BodyRig,motion_curves,parse_timeline,body_sway_curve
+        from cartoon_puppet import audio_features
+        level,_=audio_features(cfg['audio'],fps);level=np.resize(level,total) if len(level)!=total else level
+        timeline=parse_timeline(cfg.get('motion_timeline',''))
+        lead_s=float(cfg.get('lead',0))
+        timeline=[(who,a_-lead_s,b_-lead_s,act) for who,a_,b_,act in timeline]
+        timeline+=tagged
+        targets=[(p[0],p[3],p[2]) for p in puppets if p[3]] if puppet_mode else [('A',cfg['bbox'],None)]
+        for sid,fbox,mask in targets:
+            curves=motion_curves(level,fps,head_amp,timeline,active=mask,speaker=sid,continuous=head_amp!='off')
+            head_rigs.append((HeadRig(base.shape,fbox),curves))
+            sway=body_sway_curve(level,fps,cfg.get('body_amp','small'),timeline,active=mask,speaker=sid,continuous=head_amp!='off')
+            if np.any(np.abs(sway)>.02):body_rigs.append((BodyRig(base.shape,fbox),sway))
+            if puppet_mode and sid=='A' and cfg.get('eye_boxes'):
+                brow_rig=BrowRig(base.shape,cfg['eye_boxes']);brow_curve=curves[3]
+        actual['head_motion']=['CPU / 2D 頭部擺動 '+head_amp+(' + 時間軸' if timeline else '')]
+        emit(stage='compose',message=f'頭部動作：{head_amp}；{len(head_rigs)} 人'+('；含眉毛' if brow_rig else '')+(f'；時間軸 {len(timeline)} 項' if timeline else ''))
     frame=base;last_result=base
     try:
         for i in range(total):
@@ -132,7 +186,11 @@ def main():
                 frame=np.frombuffer(raw,dtype=np.uint8).reshape(h,w,3)
             if puppet is not None:
                 motion_frame=torso.apply(i/fps) if torso is not None else frame
-                opening,width=puppet_track[i];result=puppet.frame(opening,motion_frame,width)
+                result=brow_rig.apply(motion_frame,float(brow_curve[i])) if brow_rig is not None else motion_frame
+                opening,width=puppet_track[i]
+                for sid,rig,mask,_fb in puppets:
+                    m=1.0 if mask is None else float(mask[i])
+                    if m>0:result=rig.frame(opening*m,result,width*m)
             else:
                 generated=cv2.imdecode(np.fromfile(str(cache/f'{i:05d}.png'),dtype=np.uint8),cv2.IMREAD_COLOR)
                 if generated is None:raise RuntimeError('嘴型暫存不完整，請重新生成')
@@ -174,6 +232,8 @@ def main():
                     if active_geometry is not None:box_fallback_frames+=1
                     result=blend_mouth(motion_frame,generated,cfg['bbox'],user_mouth_box or cfg.get('mouth_box'),mouth_geometry=None,**blend_args)
             if photo:result=photo_motion(result,cfg['bbox'],i/fps,cfg.get('eye_boxes',[]) if cfg.get('blink') or cfg.get('gaze') else [],cfg.get('gaze',False),cfg.get('micro_motion',False),cfg.get('blink',False),'' if cfg.get('body_motion')=='speech' else cfg.get('body_motion',''),cfg.get('hand_box',[]),cfg.get('blink_profile','bezier'),cfg.get('brow_motion',False),cfg.get('lid_shadow',True))
+            for rig,(ang,nod_,shk,_b) in head_rigs:result=rig.apply(result,float(ang[i]),float(nod_[i]),float(shk[i]))
+            for rig,sw in body_rigs:result=rig.apply(result,float(sw[i]),0.,0.)
             if i==0:
                 for k in range(lead_frames):
                     weight=max(0,min(1,(k/fps-(lead-.20))/.20));weight=weight*weight*(3-2*weight)

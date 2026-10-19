@@ -67,6 +67,8 @@ type Job struct {
 	CaptionMode       string              `json:"caption_mode"`
 	CaptionTiming     string              `json:"caption_timing,omitempty"`
 	HasCaptions       bool                `json:"has_captions"`
+	Dialogue          bool                `json:"dialogue,omitempty"`
+	DialogueSpeakers  []string            `json:"dialogue_speakers,omitempty"`
 	VoiceID           string              `json:"voice_id,omitempty"`
 	VoiceTask         string              `json:"voice_task,omitempty"`
 	VoicePitch        int                 `json:"voice_pitch,omitempty"`
@@ -421,6 +423,32 @@ func (a *App) prepare(w http.ResponseWriter, r *http.Request) {
 		}
 		j.FaceBox = q.BBox
 	}
+	dialogue := r.FormValue("dialogue") == "1"
+	second := strings.TrimSpace(r.FormValue("caption_second"))
+	if utf8.RuneCountInString(second) > 1600 {
+		fail(w, 400, errors.New("第二行字幕最多 1600 字"))
+		return
+	}
+	dlg := Dialogue{Names: map[string]string{}}
+	var scriptLines []DialogueLine
+	if dialogue {
+		for _, id := range []string{"A", "B", "C", "D", "E"} {
+			name := []rune(strings.TrimSpace(r.FormValue("speaker_name_" + id)))
+			if len(name) > 12 {
+				name = name[:12]
+			}
+			if len(name) > 0 {
+				dlg.Names[id] = string(name)
+			}
+		}
+		if text != "" {
+			var e error
+			if scriptLines, e = parseDialogueScript(text); e != nil && len(r.MultipartForm.File["audio"]) == 0 {
+				fail(w, 400, e)
+				return
+			}
+		}
+	}
 	if len(r.MultipartForm.File["audio"]) > 0 {
 		ext := strings.ToLower(filepath.Ext(r.MultipartForm.File["audio"][0].Filename))
 		switch ext {
@@ -449,14 +477,28 @@ func (a *App) prepare(w http.ResponseWriter, r *http.Request) {
 		if rate < -5 || rate > 5 {
 			rate = 0
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+		ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
 		defer cancel()
-		if e := a.tts(ctx, text, r.FormValue("voice"), rate, filepath.Join(dir, j.Audio)); e != nil {
+		if dialogue {
+			voices, effects := map[string]string{}, map[string]string{}
+			for _, id := range []string{"A", "B", "C", "D", "E"} {
+				voices[id] = r.FormValue("voice_" + id)
+				if voices[id] == "" {
+					voices[id] = r.FormValue("voice")
+				}
+				effects[id] = r.FormValue("effect_" + id)
+			}
+			if e := a.dialogueSpeech(ctx, dir, scriptLines, voices, effects, rate, filepath.Join(dir, j.Audio)); e != nil {
+				fail(w, 400, e)
+				return
+			}
+			dlg.Lines = scriptLines
+		} else if e := a.tts(ctx, text, r.FormValue("voice"), rate, filepath.Join(dir, j.Audio)); e != nil {
 			fail(w, 400, e)
 			return
 		}
 	}
-	if len(r.MultipartForm.File["audio"]) == 0 && r.FormValue("effect") != "" && r.FormValue("effect") != "original" {
+	if !dialogue && len(r.MultipartForm.File["audio"]) == 0 && r.FormValue("effect") != "" && r.FormValue("effect") != "original" {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 		defer cancel()
 		altered := filepath.Join(dir, "altered.wav")
@@ -475,13 +517,56 @@ func (a *App) prepare(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, e)
 		return
 	}
-	if dur < 3 || dur > 60 {
-		fail(w, 400, fmt.Errorf("目前語音長 %.1f 秒；測試版接受 3～60 秒，請調整文字或 WAV。", dur))
+	limit := 60.
+	if dialogue {
+		limit = 120
+	}
+	if dur < 3 || dur > limit {
+		fail(w, 400, fmt.Errorf("目前語音長 %.1f 秒；接受 3～%.0f 秒，請調整文字或 WAV。", dur, limit))
 		return
 	}
 	j.Duration = dur
-	if text != "" {
-		j.HasCaptions, j.CaptionTiming, e = writeCaptions(dir, text, dur)
+	if dialogue {
+		if len(r.MultipartForm.File["audio"]) > 0 {
+			timeline, e := parseDialogueTimeline(r.FormValue("dialogue_timeline"), dur)
+			if e != nil {
+				fail(w, 400, e)
+				return
+			}
+			// Attach script texts in order when the counts match.
+			if len(scriptLines) == len(timeline) {
+				for i := range timeline {
+					timeline[i].HanText = scriptLines[i].HanText
+					timeline[i].Actions = scriptLines[i].Actions
+				}
+			}
+			dlg.Lines = timeline
+			j.CaptionTiming = "依您填寫的說話時間"
+		} else {
+			j.CaptionTiming = "依每位說話者的朗讀段落對齊"
+		}
+		seconds := nonEmptyLines(second)
+		seen := map[string]bool{}
+		for i := range dlg.Lines {
+			if i < len(seconds) {
+				dlg.Lines[i].TailoText = seconds[i]
+			}
+			if !seen[dlg.Lines[i].Speaker] {
+				seen[dlg.Lines[i].Speaker] = true
+				j.DialogueSpeakers = append(j.DialogueSpeakers, dlg.Lines[i].Speaker)
+			}
+		}
+		if e = writeDialogueFile(dir, dlg); e != nil {
+			fail(w, 500, e)
+			return
+		}
+		j.Dialogue = true
+		if j.HasCaptions, e = writeDialogueCaptions(dir, dlg, dur); e != nil {
+			fail(w, 500, e)
+			return
+		}
+	} else if text != "" {
+		j.HasCaptions, j.CaptionTiming, e = writeCaptionsSecond(dir, text, second, dur)
 		if e != nil {
 			fail(w, 500, e)
 			return

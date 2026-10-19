@@ -28,6 +28,13 @@ func stamp(seconds float64) string {
 	return fmt.Sprintf("%02d:%02d:%02d,%03d", n/3600000, n/60000%60, n/1000%60, n%1000)
 }
 func writeCaptions(dir, text string, duration float64) (bool, string, error) {
+	return writeCaptionsSecond(dir, text, "", duration)
+}
+
+// writeCaptionsSecond adds an optional second caption line (e.g. Tâi-lô under
+// Taiwanese Han characters). With a second text, each script line becomes one
+// two-line cue; the i-th second line goes under the i-th script line.
+func writeCaptionsSecond(dir, text, second string, duration float64) (bool, string, error) {
 	units := utf16.Encode([]rune(text))
 	if len(units) == 0 {
 		return false, "", nil
@@ -68,6 +75,36 @@ func writeCaptions(dir, text string, duration float64) (bool, string, error) {
 			return before.seconds + (duration-before.seconds)*float64(pos-before.pos)/float64(len(units)-before.pos)
 		}
 		return duration * float64(pos) / float64(len(units))
+	}
+	if strings.TrimSpace(second) != "" {
+		var out strings.Builder
+		seconds := nonEmptyLines(second)
+		pos, index, n := 0, 1, 0
+		for _, line := range strings.Split(text, "\n") {
+			width := len(utf16.Encode([]rune(line)))
+			from, to := timeAt(pos), timeAt(pos+width)
+			pos += width + 1
+			body := strings.TrimSpace(line)
+			if body == "" {
+				continue
+			}
+			if n < len(seconds) {
+				body += "\n" + seconds[n]
+			}
+			n++
+			if to <= from {
+				to = from + .02
+			}
+			if to > duration {
+				to = duration
+			}
+			fmt.Fprintf(&out, "%d\n%s --> %s\n%s\n\n", index, stamp(from), stamp(to), body)
+			index++
+		}
+		if out.Len() == 0 {
+			return false, "", nil
+		}
+		return true, timing + "；雙行字幕", os.WriteFile(filepath.Join(dir, "subtitles.srt"), []byte(out.String()), 0600)
 	}
 	var out strings.Builder
 	start, visible, index := 0, 0, 1
@@ -120,6 +157,16 @@ func addSubtitleFilter(args []string) []string {
 		if out[i] == "-filter_complex" {
 			out[i+1] = strings.Replace(out[i+1], ",fps=12", sub+",fps=12", 1)
 			break
+		}
+	}
+	return out
+}
+
+func nonEmptyLines(s string) []string {
+	var out []string
+	for _, l := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			out = append(out, l)
 		}
 	}
 	return out
