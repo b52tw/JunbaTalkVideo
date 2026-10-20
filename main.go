@@ -68,6 +68,7 @@ type Job struct {
 	CaptionTiming     string              `json:"caption_timing,omitempty"`
 	HasCaptions       bool                `json:"has_captions"`
 	Dialogue          bool                `json:"dialogue,omitempty"`
+	CaptionShift      float64             `json:"caption_shift,omitempty"`
 	DialogueSpeakers  []string            `json:"dialogue_speakers,omitempty"`
 	VoiceID           string              `json:"voice_id,omitempty"`
 	VoiceTask         string              `json:"voice_task,omitempty"`

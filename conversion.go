@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -215,6 +216,9 @@ func (a *App) convertHandler(w http.ResponseWriter, r *http.Request) {
 		Aspect      string `json:"aspect"`
 		Resolution  string `json:"resolution"`
 		CaptionMode string `json:"caption_mode"`
+		// v0.8.7: manual caption timing (seconds, negative = earlier),
+		// absolute value relative to the generated captions.
+		CaptionShift *float64 `json:"caption_shift"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&q) != nil {
 		fail(w, 400, errors.New("無效資料"))
@@ -227,6 +231,20 @@ func (a *App) convertHandler(w http.ResponseWriter, r *http.Request) {
 		a.mu.Unlock()
 		fail(w, 409, errors.New("請等目前任務完成，再轉出其他格式。"))
 		return
+	}
+	if q.CaptionShift != nil {
+		want := *q.CaptionShift
+		if math.IsNaN(want) || want < -5 || want > 5 {
+			a.mu.Unlock()
+			fail(w, 400, errors.New("字幕時間調整需介於 -5 至 5 秒"))
+			return
+		}
+		if e := shiftCaptions(a.dir(j.ID), want-j.CaptionShift); e != nil {
+			a.mu.Unlock()
+			fail(w, 500, e)
+			return
+		}
+		j.CaptionShift = want
 	}
 	j.busy = true
 	j.CaptionMode = captionMode(q.CaptionMode)
