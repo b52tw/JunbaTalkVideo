@@ -330,7 +330,7 @@ func (a *App) installModelSet(models []LocalModel, marker, value string) error {
 		}
 	}
 	a.setupMessage("正在安裝 OpenVINO、影像與音訊套件（約 185 MB）；請保持連網", 0, 0)
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Hour)
+	ctx, cancel := a.installContext(8 * time.Hour)
 	defer cancel()
 	log, e := os.Create(filepath.Join(dir, "install.log"))
 	if e != nil {
@@ -420,7 +420,20 @@ func (a *App) downloadArtifact(ctx context.Context, m LocalModel, dir string) er
 		os.Remove(part)
 		offset = 0
 	}
-	req, e := http.NewRequestWithContext(ctx, "GET", m.URL, nil)
+	dctx, dcancel := context.WithCancel(ctx)
+	defer dcancel()
+	guard := newStallGuard(downloadStallLimit, dcancel)
+	defer guard.stop()
+	stalled := func(e error) error {
+		if guard.isStalled() {
+			return fmt.Errorf("下載 %s 超過 %.0f 分鐘沒有資料，已自動停止；已下載部分會保留，按同一按鈕可續傳", m.Name, downloadStallLimit.Minutes())
+		}
+		if ctx.Err() == context.Canceled {
+			return errors.New("安裝已取消；已下載部分會保留，按同一按鈕可續傳")
+		}
+		return e
+	}
+	req, e := http.NewRequestWithContext(dctx, "GET", m.URL, nil)
 	if e != nil {
 		return e
 	}
@@ -430,7 +443,7 @@ func (a *App) downloadArtifact(ctx context.Context, m LocalModel, dir string) er
 	client := &http.Client{Timeout: 0}
 	res, e := client.Do(req)
 	if e != nil {
-		return e
+		return stalled(e)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 206 {
@@ -452,6 +465,7 @@ func (a *App) downloadArtifact(ctx context.Context, m LocalModel, dir string) er
 	for {
 		n, re := res.Body.Read(buf)
 		if n > 0 {
+			guard.touch()
 			wn, we := f.Write(buf[:n])
 			offset += int64(wn)
 			if we != nil {
@@ -471,7 +485,7 @@ func (a *App) downloadArtifact(ctx context.Context, m LocalModel, dir string) er
 		if re != nil {
 			f.Close()
 			if re != io.EOF {
-				return re
+				return stalled(re)
 			}
 			break
 		}

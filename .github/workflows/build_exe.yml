@@ -48,7 +48,7 @@ jobs:
         run: |
           python tests/test_native_retry.py
           if ($LASTEXITCODE -ne 0) { throw 'Worker retry regression failed' }
-          go test -run 'TestWorkerBudgetPolicy|TestErrorReportAllowlistAndBound|TestV08Options' -count=1 .
+          go test -run 'TestWorkerBudgetPolicy|TestErrorReportAllowlistAndBound|TestV08Options|TestDownloadStallAbortsAndKeepsPart|TestInstallCancelEndpoint' -count=1 .
           if ($LASTEXITCODE -ne 0) { throw 'Budget/report regression failed' }
       - name: Native EXE headless self-check
         shell: pwsh
@@ -86,14 +86,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Wrapper build failed' }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: JunbaTalkVideo_v0.8.8_EmbeddedPortable.zip
-          path: dist/JunbaTalkVideo_v0.8.8_EmbeddedPortable.zip
+          name: JunbaTalkVideo_v0.8.9_EmbeddedPortable.zip
+          path: dist/JunbaTalkVideo_v0.8.9_EmbeddedPortable.zip
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: JunbaTalkVideo_v0.8.8.exe
-          path: dist/JunbaTalkVideo_v0.8.8.exe
+          name: JunbaTalkVideo_v0.8.9.exe
+          path: dist/JunbaTalkVideo_v0.8.9.exe
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -102,6 +102,6 @@ jobs:
           name: Windows-validation-and-small-portable
           path: |
             dist/*.json
-            dist/JunbaTalkVideo_v0.8.8_Windows64.zip
+            dist/JunbaTalkVideo_v0.8.9_Windows64.zip
             dist/JunbaTalkVideo_PyInstaller.exe
           if-no-files-found: warn

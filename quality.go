@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -165,7 +164,7 @@ func (a *App) installQuality(w http.ResponseWriter, r *http.Request) {
 	a.localState.Message = "下載卡通嘴部細節模型（約 9 MB）"
 	a.localMu.Unlock()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		ctx, cancel := a.installContext(30 * time.Minute)
 		defer cancel()
 		var err error
 		for _, m := range qualityModels() {
@@ -215,7 +214,7 @@ func (a *App) installReal(w http.ResponseWriter, r *http.Request) {
 	a.localState.Message = "下載真人嘴部修復模型（約 340 MB）"
 	a.localMu.Unlock()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		ctx, cancel := a.installContext(30 * time.Minute)
 		defer cancel()
 		var err error
 		for _, m := range realModels() {

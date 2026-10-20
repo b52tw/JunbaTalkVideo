@@ -104,6 +104,7 @@ type App struct {
 	localMu                sync.Mutex
 	localState             LocalStatus
 	localCancel            context.CancelFunc
+	installCancel          context.CancelFunc
 	localJob               string
 }
 
@@ -238,6 +239,8 @@ func (a *App) handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	switch {
+	case r.URL.Path == "/api/local/install-cancel" && r.Method == "POST":
+		a.cancelInstall(w)
 	case strings.HasPrefix(r.URL.Path, "/api/local/"):
 		a.localHandler(w, r)
 	case r.URL.Path == "/" && r.Method == "GET":

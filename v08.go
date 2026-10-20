@@ -180,7 +180,7 @@ func (a *App) installDirectML(py, root, scripts string) error {
 		return e
 	}
 	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+	ctx, cancel := a.installContext(2 * time.Hour)
 	defer cancel()
 	var rows []LocalModel
 	b, _ := localFiles.ReadFile("local/directml_wheels.json")

@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/zip"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -141,7 +140,7 @@ func (a *App) installManagedSad() error {
 		return e
 	}
 	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Hour)
+	ctx, cancel := a.installContext(8 * time.Hour)
 	defer cancel()
 	log, e := os.Create(filepath.Join(root, "install.log"))
 	if e != nil {
