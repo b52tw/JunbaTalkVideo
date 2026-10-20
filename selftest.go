@@ -19,7 +19,7 @@ func runSelfTest(args []string) bool {
 	if len(args) != 2 {
 		os.Exit(2)
 	}
-	report := map[string]any{"version": "0.8.6-engineering", "os": runtime.GOOS, "arch": runtime.GOARCH, "ok": false}
+	report := map[string]any{"version": "0.8.7-engineering", "os": runtime.GOOS, "arch": runtime.GOARCH, "ok": false}
 	err := func() error {
 		dir, e := os.MkdirTemp("", "Junba self test ")
 		if e != nil {

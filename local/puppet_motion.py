@@ -116,16 +116,17 @@ class HeadRig:
         fx, fy, fw, fh = x * w, y * h, bw * w, bh * h
         self.pivot = np.array([fx + fw / 2, fy + fh * 1.02], np.float32)
         self.fh = fh
-        # Head ellipse: face box widened a little and extended up for hair.
-        cx, cy = fx + fw / 2, fy + fh * .38
-        ax, ay = fw * .72, fh * .95
+        # v0.8.7: tight head ellipse (face + hair only). A wide falloff dragged
+        # hands/V-signs next to the face along with the head.
+        cx, cy = fx + fw / 2, fy + fh * .40
+        ax, ay = fw * .58, fh * .80
         pad = int(max(fw, fh) * .45)
         self.roi = (max(0, int(fx - pad)), max(0, int(fy - fh * .75)),
                     min(w, int(fx + fw + pad)), min(h, int(fy + fh * 1.35)))
         rx1, ry1, rx2, ry2 = self.roi
         yy, xx = np.mgrid[ry1:ry2, rx1:rx2].astype(np.float32)
         r = np.sqrt(((xx - cx) / ax) ** 2 + ((yy - cy) / ay) ** 2)
-        inside = np.clip((1.35 - r) / .35, 0, 1)
+        inside = np.clip((1.12 - r) / .18, 0, 1)
         # Neck/shoulders below the pivot stay put.
         below = np.clip(1 - (yy - self.pivot[1]) / (fh * .25), 0, 1)
         weight = inside * below

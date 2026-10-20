@@ -31,7 +31,7 @@ func (a *App) errorReport(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, errors.New("請等生成或停止完成後下載報告"))
 		return
 	}
-	info := map[string]any{"version": "0.8.6", "os": runtime.GOOS, "arch": runtime.GOARCH,
+	info := map[string]any{"version": "0.8.7", "os": runtime.GOOS, "arch": runtime.GOARCH,
 		"id": j.ID, "state": j.State, "message": j.Message, "engine": j.Engine,
 		"settings": j.LocalSettings, "actual_devices": j.ActualDevices, "memory_peaks": j.MemoryPeaks,
 		"effective_budget_mb": j.EffectiveBudgetMB, "memory": memoryInfo()}

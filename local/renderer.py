@@ -69,7 +69,8 @@ def main():
                     x,y,bw_,bh_=sp['mouth_box'];t=np.linspace(0,2*np.pi,32,endpoint=False)
                     sp_outer=np.c_[x+bw_/2+bw_*.48*np.cos(t),y+bh_/2+bh_*.48*np.sin(t)].tolist()
                     emit(stage='compose',message=f'警告：說話者 {sid} 唇線不清楚；改用嘴框推估')
-            try:rig=CartoonPuppet(base,sp_outer,max_open=float(cfg.get('puppet_open',.55)))
+            fb=sp.get('face_box') or (cfg['bbox'] if sid=='A' else None)
+            try:rig=CartoonPuppet(base,sp_outer,max_open=float(cfg.get('puppet_open',.55)),face_h=(fb[3]*h if fb else None))
             except Exception as e:
                 emit(stage='compose',message=f'警告：說話者 {sid} 嘴部無法變形（{e}）；此人保持原圖');continue
             mask=masks.get(sid) if dialogue else None
@@ -171,8 +172,7 @@ def main():
         for sid,fbox,mask in targets:
             curves=motion_curves(level,fps,head_amp,timeline,active=mask,speaker=sid,continuous=head_amp!='off')
             head_rigs.append((HeadRig(base.shape,fbox),curves))
-            sway=body_sway_curve(level,fps,cfg.get('body_amp','small'),timeline,active=mask,speaker=sid,continuous=head_amp!='off')
-            if np.any(np.abs(sway)>.02):body_rigs.append((BodyRig(base.shape,fbox),sway))
+            # v0.8.7: body sway removed (2-D warp bent arms/hands next to the body).
             if puppet_mode and sid=='A' and cfg.get('eye_boxes'):
                 brow_rig=BrowRig(base.shape,cfg['eye_boxes']);brow_curve=curves[3]
         actual['head_motion']=['CPU / 2D 頭部擺動 '+head_amp+(' + 時間軸' if timeline else '')]

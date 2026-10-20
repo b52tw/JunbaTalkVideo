@@ -125,7 +125,7 @@ def parting_line(image, outer):
 
 
 class CartoonPuppet:
-    def __init__(self, image, outer, max_open=.55, lift=.22, chin=1.6):
+    def __init__(self, image, outer, max_open=.55, lift=.22, chin=1.6, face_h=None):
         self.base = image
         self.part = parting_line(image, outer)
         if self.part is None:
@@ -133,6 +133,13 @@ class CartoonPuppet:
         x1, y1, bw, bh = self.part['box']
         h, w = image.shape[:2]
         self.max_open = max_open * bh
+        jaw = bh * chin
+        if face_h:
+            # v0.8.7: a mouth drawn wide open must not drag the chin/neck down.
+            # Cap the opening and the jaw falloff by the face size.
+            self.max_open = min(self.max_open, max_open * .20 * face_h)
+            jaw = min(jaw, .30 * face_h)
+            chin = max(.3, jaw / max(bh, 1))
         self.lift = lift
         # Region of interest: mouth, a little above, and the jaw below.
         pad_x = int(bw * .35)
