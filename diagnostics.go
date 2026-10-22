@@ -27,7 +27,7 @@ func portablePython() string {
 	var v struct {
 		ID string `json:"id"`
 	}
-	if json.Unmarshal(b, &v) != nil || v.ID != "junba-sdk-v081" {
+	if json.Unmarshal(b, &v) != nil || !supportedPortableSDKBundle(v.ID) {
 		return ""
 	}
 	p := filepath.Join(base, "python", "python.exe")
