@@ -1,6 +1,23 @@
-> 本封包新增 v0.8.3 第一階段核心審閱內容，請先看 PHASE1_REVIEW.md 與 Verify_Mask.cmd。下文 v0.8.2 是上一版執行程式說明，本輪未編譯或打包 EXE。GitHub 建置亦需手動勾選已確認遮罩才會執行。
+# 峻爸 AI 對嘴短影音 v0.9.0
 
-# 峻爸 AI 對嘴短影音 v0.8.2 執行修復版
+本版目標是交付可執行的 Windows x64 EXE，並由 GitHub Actions 編譯、執行原生自我檢查、跑合成資料安全測試，最後提供可下載建置產物。
+
+## v0.9.0 變更摘要
+
+- 單一版本來源：根目錄 `VERSION` 控制程式介面、診斷資訊、SDK bundle 與封裝檔名。
+- Windows 建置：Pull Request 會執行 Windows EXE／Embedded Python 建置；成功時提供 `JunbaTalkVideo_v0.9.0.exe`、Windows64 ZIP 與 EmbeddedPortable ZIP。
+- 本機輕量環境：可先安裝 Python／OpenCV／SciPy／OpenVINO 等執行套件，不下載大型 MuseTalk 權重；卡通原圖 Puppet 可使用此環境。
+- 啟動預檢：開始推論前檢查素材、套件、後端、權重檔與可用磁碟空間；預檢不會載入神經模型。
+- 自然微動：頭部使用前景遮罩與固定背景合成，遮罩不可靠就略過；身體微呼吸／重音肩動位移限制約 2 px。
+- 低資源預設：首次試做 720p／12 FPS。此設定降低資源需求，但不能保證每台電腦都能跑完大型 AI 模型。
+
+## 驗證邊界
+
+CI 的合成遮罩測試與原生 EXE 自我檢查，不等於在使用者電腦完成 MuseTalk／SadTalker 全模型推論。四支回歸影片的來源版本與引擎仍待確認；Intel GPU／NPU、長片與真實模型效果，必須在目標 Windows 電腦實測。請以 PR 的 GitHub Actions 結果與 `VALIDATION_v0.9.0.json` 為準。
+
+---
+
+## 歷史基準：v0.8.2 執行修復版
 
 修復 GPU 原生中止（含 0xffffffff）未進入 CPU 回退的缺口：前一工作程序 wait 完全退出後，緩衝 1 秒，再用新 CPU 程序重試；NPU 聯動關閉。OpenVINO NUM_STREAMS=1（CPU／GPU）、支援的編譯執行緒=1、CPU 推論=1～2，ORT=2／1。啟動閘門會等 Go 記憶體預算掛接成功才啟動 SDK 子行程。未降低嘴型輸出解析度。
 

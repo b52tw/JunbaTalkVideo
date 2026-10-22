@@ -1,10 +1,10 @@
 import hashlib,json,shutil,zipfile
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1];DIST=ROOT/'dist';DIST.mkdir(exist_ok=True);VERSION='0.8.9'
+ROOT=Path(__file__).resolve().parents[1];DIST=ROOT/'dist';DIST.mkdir(exist_ok=True);VERSION=(ROOT/'VERSION').read_text(encoding='utf-8').strip()
 exe=DIST/f'JunbaTalkVideo_v{VERSION}.exe';shutil.copyfile(ROOT/'JunbaTalkVideo.exe',exe)
 def docs(folder):
     folder.mkdir(exist_ok=True,parents=True);shutil.copyfile(exe,folder/'JunbaTalkVideo.exe')
-    for name in ('README.md','GITHUB_BUILD.md','ENGINE_GUIDE.md','DEVELOPMENT_RULES.md','MOTION_ROADMAP.md','SOURCES.md','VALIDATION_v0.8.json','LICENSE-MIT.txt'):
+    for name in ('README.md','GITHUB_BUILD.md','ENGINE_GUIDE.md','DEVELOPMENT_RULES.md','MOTION_ROADMAP.md','SOURCES.md','VALIDATION_v0.8.json','VALIDATION_v0.9.0.json','LICENSE-MIT.txt'):
         if (ROOT/name).exists():shutil.copyfile(ROOT/name,folder/name)
     shutil.copytree(ROOT/'third_party',folder/'third_party',dirs_exist_ok=True)
 def pack(folder,name):

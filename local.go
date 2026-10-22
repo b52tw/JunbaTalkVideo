@@ -42,6 +42,7 @@ type LocalStatus struct {
 	RealReady     bool          `json:"real_ready"`
 	QualityReady  bool          `json:"quality_ready"`
 	Ready         bool          `json:"ready"`
+	RuntimeReady  bool          `json:"runtime_ready"`
 	VoiceReady    bool          `json:"voice_ready"`
 	Busy          bool          `json:"busy"`
 	Message       string        `json:"message"`
@@ -68,6 +69,17 @@ func (a *App) localPython() string {
 		return sidecar
 	}
 	return p
+}
+func (a *App) localRuntimeReady() bool {
+	if a.localReady() {
+		return true
+	}
+	b, e := os.ReadFile(filepath.Join(a.localDir(), "runtime-installed.txt"))
+	if e != nil || string(b) != runtimeInstallMarker() {
+		return false
+	}
+	_, e = os.Stat(a.localPython())
+	return e == nil
 }
 func (a *App) localReady() bool {
 	b, e := os.ReadFile(filepath.Join(a.localDir(), "installed.txt"))
@@ -122,6 +134,7 @@ func (a *App) localHandler(w http.ResponseWriter, r *http.Request) {
 		s := a.localState
 		a.localMu.Unlock()
 		s.Ready = a.localReady()
+		s.RuntimeReady = a.localRuntimeReady()
 		s.DirectMLReady = directMLReady(a.localDir())
 		s.FaceReady = a.faceReady()
 		s.QualityReady = a.qualityReady()
@@ -130,12 +143,40 @@ func (a *App) localHandler(w http.ResponseWriter, r *http.Request) {
 		s.Memory = memoryInfo()
 		if s.Message == "" {
 			if s.Ready || s.VoiceReady {
-				s.Message = "本機模型已安裝，可按「偵測可用裝置」更新 GPU／NPU 清單。"
+				s.Message = "完整本機 AI 模型已安裝，可按「偵測可用裝置」更新 GPU／NPU 清單。"
+			} else if s.RuntimeReady {
+				s.Message = "本機輕量環境已就緒：卡通原圖 Puppet 可用；MuseTalk AI 對嘴模型尚未安裝。"
 			} else {
-				s.Message = "首次安裝約下載 2 GB；完成後可離線使用。"
+				s.Message = "可先安裝本機輕量環境（不下載大型 AI 權重），或安裝完整本機 AI 模型。"
 			}
 		}
 		respond(w, s)
+	case r.URL.Path == "/api/local/runtime-install" && r.Method == "POST":
+		if runtime.GOOS != "windows" {
+			fail(w, 400, errors.New("本機輕量環境自動安裝適用 Windows 64 位元。"))
+			return
+		}
+		a.localMu.Lock()
+		if a.localState.Busy || a.localJob != "" {
+			a.localMu.Unlock()
+			fail(w, 409, errors.New("已有安裝或本機生成正在執行。"))
+			return
+		}
+		a.localState.Busy = true
+		a.localState.Message = "正在安裝本機輕量環境；不下載大型 AI 權重"
+		a.localMu.Unlock()
+		go func() {
+			e := a.installModelSet(nil, "runtime-installed.txt", runtimeInstallMarker())
+			a.localMu.Lock()
+			a.localState.Busy = false
+			if e != nil {
+				a.localState.Message = "輕量環境安裝未完成，可按同一按鈕重試：" + e.Error()
+			} else {
+				a.localState.Message = "本機輕量環境安裝完成；卡通原圖 Puppet 可用，AI 對嘴模型可之後再安裝。"
+			}
+			a.localMu.Unlock()
+		}()
+		respond(w, map[string]bool{"ok": true})
 	case r.URL.Path == "/api/local/install" && r.Method == "POST":
 		if runtime.GOOS != "windows" {
 			fail(w, 400, errors.New("自動安裝適用 Windows 64 位元；其他平台請依原始碼說明安裝。"))
@@ -163,8 +204,8 @@ func (a *App) localHandler(w http.ResponseWriter, r *http.Request) {
 		}()
 		respond(w, map[string]bool{"ok": true})
 	case r.URL.Path == "/api/local/probe" && r.Method == "POST":
-		if !a.localReady() && !a.voiceReady() {
-			fail(w, 409, errors.New("請先安裝本機模型。"))
+		if !a.localReady() && !a.localRuntimeReady() && !a.voiceReady() {
+			fail(w, 409, errors.New("請先安裝本機輕量環境或完整本機模型。"))
 			return
 		}
 		a.localMu.Lock()
@@ -323,7 +364,7 @@ func (a *App) installModelSet(models []LocalModel, marker, value string) error {
 		}
 
 	}
-	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "cartoon_puppet.py", "puppet_motion.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz", "requirements.txt"} {
+	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "preflight.py", "cartoon_puppet.py", "puppet_motion.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz", "requirements.txt"} {
 		b, _ := localFiles.ReadFile("local/" + name)
 		if e := os.WriteFile(filepath.Join(dir, name), b, 0600); e != nil {
 			return e
@@ -708,12 +749,16 @@ func validateLocal(q *LocalRequest) error {
 	switch q.MaxSide {
 	case 512, 720, 1080, 1920, 2160:
 	default:
-		q.MaxSide = 1920
+		q.MaxSide = 720
 	}
 	switch q.BodyMotion {
 	case "", "breathe", "sway", "nod", "hand", "speech":
 	default:
 		return errors.New("無效的動作選項")
+	}
+	// v0.9.0 safety mode disables legacy full-frame sway/nod/hand warps.
+	if q.BodyMotion == "sway" || q.BodyMotion == "nod" || q.BodyMotion == "hand" {
+		q.BodyMotion = ""
 	}
 	if len(q.HandBox) > 0 && !validRegion(q.HandBox) {
 		return errors.New("手部範圍無效")
@@ -745,12 +790,17 @@ func (a *App) localGenerate(w http.ResponseWriter, r *http.Request) {
 		a.externalGenerate(w, r, q)
 		return
 	}
-	if q.Runtime == "directml" && !directMLReady(a.localDir()) {
+	if q.Engine == "musetalk" && q.Runtime == "directml" && !directMLReady(a.localDir()) {
 		fail(w, 409, errors.New("請先一鍵安裝 DirectML 後端"))
 		return
 	}
-	if !a.localReady() {
-		fail(w, 409, errors.New("請先完成本機模型安裝。"))
+	if q.Engine == "puppet" {
+		if !a.localRuntimeReady() {
+			fail(w, 409, errors.New("請先安裝「本機輕量環境」（不下載 AI 權重），即可使用卡通原圖唇形。"))
+			return
+		}
+	} else if !a.localReady() {
+		fail(w, 409, errors.New("請先完成本機 AI 模型安裝。"))
 		return
 	}
 	if q.RealDetail && !a.realReady() {
@@ -921,6 +971,8 @@ func (a *App) runLocal(ctx context.Context, q LocalRequest) {
 		// Cartoon lip puppet warps the original mouth; no neural stages.
 		phases = []phase{{"renderer.py", nil}}
 	}
+	// Run lightweight diagnostics before any neural model inference.
+	phases = append([]phase{{"preflight.py", nil}}, phases...)
 	for _, work := range phases {
 		lastError, workerError := a.runLocalWorker(ctx, q.ID, work.script, filepath.Join(dir, "local-config.json"), log, work.args...)
 		if ctx.Err() != nil {

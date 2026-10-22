@@ -2,7 +2,7 @@
 import argparse, json, subprocess, sys, threading, time
 from pathlib import Path
 
-ALLOWED = {'stage_worker.py', 'sad_worker.py', 'sad_export.py', 'renderer.py', 'detail_cache.py'}
+ALLOWED = {'preflight.py', 'stage_worker.py', 'sad_worker.py', 'sad_export.py', 'renderer.py', 'detail_cache.py'}
 MEMORY_ERRORS = ('bad_alloc', 'out of memory', 'not enough memory', 'failed to allocate',
                  'cannot allocate', 'memoryerror', '0x8007000e', '記憶體不足')
 
@@ -26,7 +26,8 @@ def run_stage(script, config, extra):
         override = json.loads(fallback.read_text(encoding='utf-8'))
         if override.get('run_id') == cfg.get('run_id', 'direct'):
             cfg.update(override)
-    for attempt in range(4):
+    max_attempts = 1 if script == 'preflight.py' else 4
+    for attempt in range(max_attempts):
         attempt_config = folder / ('attempt-' + phase + '-' + str(attempt + 1) + '.json')
         attempt_config.write_text(json.dumps(cfg), encoding='utf-8')
         event = dict(time=time.time(), run_id=cfg.get('run_id', 'direct'), script=script,

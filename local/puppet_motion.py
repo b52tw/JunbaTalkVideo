@@ -108,46 +108,117 @@ def motion_curves(level, fps, amplitude='small', timeline=(), active=None, speak
 
 
 class HeadRig:
-    """Rotate/nod/shake one head about the neck with a soft falloff mask."""
+    """Conservative foreground-only head motion with a fixed, inpainted background.
 
-    def __init__(self, shape, face_box):
+    The mask must pass GrabCut and connected-component checks. If not, motion is
+    disabled instead of warping background pixels along with the face.
+    """
+
+    def __init__(self, shape, face_box, image=None, style='auto'):
+        self.ready = False
+        self.last_union = None
+        self.roi = (0, 0, 0, 0)
+        if image is None or image.shape[:2] != tuple(shape[:2]):
+            return
         h, w = shape[:2]
         x, y, bw, bh = face_box
         fx, fy, fw, fh = x * w, y * h, bw * w, bh * h
-        self.pivot = np.array([fx + fw / 2, fy + fh * 1.02], np.float32)
-        self.fh = fh
-        # v0.8.7: tight head ellipse (face + hair only). A wide falloff dragged
-        # hands/V-signs next to the face along with the head.
-        cx, cy = fx + fw / 2, fy + fh * .40
-        ax, ay = fw * .58, fh * .80
-        pad = int(max(fw, fh) * .45)
-        self.roi = (max(0, int(fx - pad)), max(0, int(fy - fh * .75)),
-                    min(w, int(fx + fw + pad)), min(h, int(fy + fh * 1.35)))
-        rx1, ry1, rx2, ry2 = self.roi
-        yy, xx = np.mgrid[ry1:ry2, rx1:rx2].astype(np.float32)
-        r = np.sqrt(((xx - cx) / ax) ** 2 + ((yy - cy) / ay) ** 2)
-        inside = np.clip((1.12 - r) / .18, 0, 1)
-        # Neck/shoulders below the pivot stay put.
-        below = np.clip(1 - (yy - self.pivot[1]) / (fh * .25), 0, 1)
-        weight = inside * below
-        self.weight = (weight * weight * (3 - 2 * weight)).astype(np.float32)
-        self.xx, self.yy = xx, yy
+        if fw < 12 or fh < 12:
+            return
+        x1, y1 = max(0, int(fx - .70 * fw)), max(0, int(fy - .55 * fh))
+        x2, y2 = min(w, int(fx + 1.70 * fw)), min(h, int(fy + 1.35 * fh))
+        if x2 - x1 < 24 or y2 - y1 < 24:
+            return
+        self.roi = (x1, y1, x2, y2)
+        source = image[y1:y2, x1:x2].copy()
+        rh, rw = source.shape[:2]
+        scale = min(1.0, 384.0 / max(rh, rw))
+        sw, sh = max(16, int(rw * scale)), max(16, int(rh * scale))
+        small = cv2.resize(source, (sw, sh), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
+        # A flat/uniform crop carries no reliable foreground boundary; fail closed.
+        if float(np.std(small)) < 1.5:
+            return
+        cx = int((fx + fw * .5 - x1) * scale)
+        cy = int((fy + fh * .40 - y1) * scale)
+        ax, ay = max(5, int(fw * .66 * scale)), max(5, int(fh * .80 * scale))
+        mask = np.full((sh, sw), cv2.GC_BGD, np.uint8)
+        cv2.ellipse(mask, (cx, cy), (ax, ay), 0, 0, 360, cv2.GC_PR_FGD, -1)
+        core_x1 = max(0, int((fx + fw * .20 - x1) * scale))
+        core_x2 = min(sw - 1, int((fx + fw * .80 - x1) * scale))
+        core_y1 = max(0, int((fy + fh * .14 - y1) * scale))
+        core_y2 = min(sh - 1, int((fy + fh * .78 - y1) * scale))
+        if core_x2 <= core_x1 or core_y2 <= core_y1:
+            return
+        cv2.rectangle(mask, (core_x1, core_y1), (core_x2, core_y2), cv2.GC_FGD, -1)
+        bgd = np.zeros((1, 65), np.float64)
+        fgd = np.zeros((1, 65), np.float64)
+        try:
+            cv2.grabCut(small, mask, None, bgd, fgd, 3, cv2.GC_INIT_WITH_MASK)
+        except cv2.error:
+            return
+        hard = ((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD)).astype(np.uint8)
+        ratio = float(hard.mean())
+        if not .015 < ratio < .78:
+            return
+        count, labels = cv2.connectedComponents(hard)
+        if count < 2:
+            return
+        sx = int(np.clip(cx, 0, sw - 1))
+        sy = int(np.clip(cy, 0, sh - 1))
+        label = int(labels[sy, sx])
+        if label == 0:
+            core = labels[core_y1:core_y2 + 1, core_x1:core_x2 + 1]
+            candidates = core[core > 0]
+            if candidates.size == 0:
+                return
+            label = int(np.bincount(candidates).argmax())
+        hard = (labels == label).astype(np.uint8)
+        if float(hard.mean()) < .01:
+            return
+        hard = cv2.morphologyEx(hard, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        hard = cv2.resize(hard, (rw, rh), interpolation=cv2.INTER_NEAREST)
+        hard = cv2.dilate(hard, np.ones((3, 3), np.uint8), iterations=1)
+        self.alpha_roi = cv2.GaussianBlur(hard.astype(np.float32), (0, 0), .8).clip(0, 1)
+        original_mask = (self.alpha_roi > .06).astype(np.uint8)
+        inpaint_mask = cv2.dilate(original_mask, np.ones((5, 5), np.uint8), iterations=1)
+        try:
+            self.background_roi = cv2.inpaint(source, inpaint_mask, 3, cv2.INPAINT_TELEA)
+        except cv2.error:
+            return
+        self.inpaint_union = inpaint_mask > 0
+        self.last_union = self.inpaint_union.copy()
+        self.fh = float(fh)
+        self.local_pivot = (float(fx + fw * .5 - x1), float(fy + fh * .96 - y1))
+        self.ready = True
 
     def apply(self, image, angle_deg, nod, shake):
-        if abs(angle_deg) < .02 and abs(nod) < 1e-4 and abs(shake) < 1e-4:
+        if not self.ready:
             return image
-        a = math.radians(angle_deg)
-        dx, dy = shake * self.fh, nod * self.fh
-        px, py = self.pivot
-        # Inverse map: destination -> source (rotate by -a about the pivot).
-        ux, uy = self.xx - px - dx, self.yy - py - dy
-        sx = px + ux * math.cos(a) + uy * math.sin(a)
-        sy = py - ux * math.sin(a) + uy * math.cos(a)
-        mx = (self.xx + (sx - self.xx) * self.weight).astype(np.float32)
-        my = (self.yy + (sy - self.yy) * self.weight).astype(np.float32)
-        rx1, ry1, rx2, ry2 = self.roi
+        if abs(angle_deg) < .02 and abs(nod) < 1e-4 and abs(shake) < 1e-4:
+            self.last_union = self.inpaint_union.copy()
+            return image
+        x1, y1, x2, y2 = self.roi
+        rw, rh = x2 - x1, y2 - y1
+        px, py = self.local_pivot
+        angle = float(np.clip(angle_deg, -1.5, 1.5))
+        dx = float(np.clip(shake * self.fh, -2.0, 2.0))
+        dy = float(np.clip(nod * self.fh, -2.0, 2.0))
+        matrix = cv2.getRotationMatrix2D((px, py), angle, 1.0)
+        matrix[0, 2] += dx
+        matrix[1, 2] += dy
+        foreground = cv2.warpAffine(image[y1:y2, x1:x2], matrix, (rw, rh),
+                                    flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+        alpha = cv2.warpAffine(self.alpha_roi, matrix, (rw, rh), flags=cv2.INTER_LINEAR,
+                               borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        alpha = cv2.GaussianBlur(np.clip(alpha, 0, 1), (0, 0), .55)
+        union = self.inpaint_union | (alpha > .025)
+        bg = self.background_roi.astype(np.float32)
+        fg = foreground.astype(np.float32)
+        composed = fg * alpha[:, :, None] + bg * (1.0 - alpha[:, :, None])
         out = image.copy()
-        out[ry1:ry2, rx1:rx2] = cv2.remap(image, mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+        roi = out[y1:y2, x1:x2]
+        roi[union] = np.clip(composed[union], 0, 255).astype(np.uint8)
+        self.last_union = union
         return out
 
 

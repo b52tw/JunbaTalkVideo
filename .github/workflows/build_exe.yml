@@ -16,7 +16,7 @@ permissions:
   contents: read
 jobs:
   windows:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mask_review_approved == true }}
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mask_review_approved == true) }}
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -27,6 +27,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.11'
+      - name: Read app version
+        id: app_version
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid VERSION: $version" }
+          "version=$version" >> $env:GITHUB_OUTPUT
       - name: Source checkpoint BEFORE build or tests
         shell: pwsh
         run: python ci/checkpoint.py
@@ -48,7 +55,7 @@ jobs:
         run: |
           python tests/test_native_retry.py
           if ($LASTEXITCODE -ne 0) { throw 'Worker retry regression failed' }
-          go test -run 'TestWorkerBudgetPolicy|TestErrorReportAllowlistAndBound|TestV08Options|TestDownloadStallAbortsAndKeepsPart|TestInstallCancelEndpoint' -count=1 .
+          go test -run 'TestWorkerBudgetPolicy|TestErrorReportAllowlistAndBound|TestV08Options|TestDownloadStallAbortsAndKeepsPart|TestInstallCancelEndpoint|TestAppVersionIsSingleSource|TestPortableSDKCompatibilityChecks|TestLocalRuntimeReadyWithoutAIWeights' -count=1 .
           if ($LASTEXITCODE -ne 0) { throw 'Budget/report regression failed' }
       - name: Native EXE headless self-check
         shell: pwsh
@@ -73,6 +80,16 @@ jobs:
             Write-Host "::error title=Single frame smoke failed::$tail"
             throw "Single frame smoke failed ($code)"
           }
+      - name: Synthetic motion and startup preflight regressions (no neural weights)
+        shell: pwsh
+        run: |
+          $py = '.build/portable-runtime/base/python/python.exe'
+          & $py -I tests/test_motion_safety.py
+          if ($LASTEXITCODE -ne 0) { throw 'Background-locked motion regression failed' }
+          & $py -I tests/test_preflight.py
+          if ($LASTEXITCODE -ne 0) { throw 'Startup preflight regression failed' }
+          & $py -I -m py_compile local/preflight.py local/puppet_motion.py local/body_motion.py local/renderer.py local/stage_dispatch.py
+          if ($LASTEXITCODE -ne 0) { throw 'Python syntax regression failed' }
       - name: Integrate one portable folder and ZIP
         shell: pwsh
         run: python ci/package.py
@@ -86,14 +103,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Wrapper build failed' }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: JunbaTalkVideo_v0.8.9_EmbeddedPortable.zip
-          path: dist/JunbaTalkVideo_v0.8.9_EmbeddedPortable.zip
+          name: JunbaTalkVideo_v${{ steps.app_version.outputs.version }}_EmbeddedPortable.zip
+          path: dist/JunbaTalkVideo_v${{ steps.app_version.outputs.version }}_EmbeddedPortable.zip
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: JunbaTalkVideo_v0.8.9.exe
-          path: dist/JunbaTalkVideo_v0.8.9.exe
+          name: JunbaTalkVideo_v${{ steps.app_version.outputs.version }}.exe
+          path: dist/JunbaTalkVideo_v${{ steps.app_version.outputs.version }}.exe
           archive: false
           if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -102,6 +119,6 @@ jobs:
           name: Windows-validation-and-small-portable
           path: |
             dist/*.json
-            dist/JunbaTalkVideo_v0.8.9_Windows64.zip
+            dist/JunbaTalkVideo_v${{ steps.app_version.outputs.version }}_Windows64.zip
             dist/JunbaTalkVideo_PyInstaller.exe
           if-no-files-found: warn

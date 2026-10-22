@@ -1,15 +1,31 @@
-# v0.8.2：Go＋Embedded Python 混合原生建置
+# v0.9.0 Windows EXE 建置流程
 
-1. 解壓 GitHub_Builder.zip，把內容上傳至 repository 根目錄。根目錄須有 go.mod、build.ps1，以及隱藏資料夾 .github/workflows/build_exe.yml，勿多包一層。
-2. Actions 允許執行後，push 自動觸發，或選 Build Windows Go + Embedded Python → Run workflow。
-3. 流程一開始先產出並上傳 Source-and-GitHub-Builder，即使後續建置失敗仍可先下載源碼。
-4. Windows 原生 go build 產出 GUI EXE；另一個獨立 Embedded Python 3.11.9 子模組裝入固定 OpenVINO 2026.4.1 與 ORT DirectML 1.24.4，只做微型 Conv＋ReLU 與一格假資料合成。沒有真實大模型或長片推論。
-5. 下載 JunbaTalkVideo_v0.8.2_EmbeddedPortable.zip，解壓同一資料夾後開 JunbaTalkVideo.exe。runtime/base/python 是獨立推論環境，不需系統 Python。新電腦可先做 Self-Check，再按一鍵下載模型；如果已有 AppData 環境則沿用它，避免更動舊環境。
+## 建置產物
 
-Artifacts 另提供小版 Windows64.zip 與單一 EXE；這兩種沒有預裝完整 SDK，會由程式一鍵安裝。免安裝 EmbeddedPortable 已含 SDK，但不含數 GB 模型權重。SadTalker 仍是獨立的一鍵安裝環境，不把全部 Torch 模型塞入輕量啟動程式。
+根目錄 `VERSION` 是唯一版本來源。Windows 建置成功後，Actions 會上傳：
 
-requirements.txt／JunbaTalkVideo.spec 是可選 PyInstaller 啟動包裝器，Run workflow 勾 pyinstaller_launcher 才額外建立。預設原生 Go EXE 本身已是單一檔，不需 PyInstaller；包裝器不提高畫質，也不替代 runtime 子模組。
+- `JunbaTalkVideo_v0.9.0.exe`：Windows x64 原生 GUI。
+- `JunbaTalkVideo_v0.9.0_Windows64.zip`：小型便攜包。
+- `JunbaTalkVideo_v0.9.0_EmbeddedPortable.zip`：獨立 Python／OpenVINO／DirectML 執行環境；不包含數 GB 的 AI 權重。
+- `Source-and-GitHub-Builder`：在測試前先建立並上傳的原始碼／建置封包。
+- `Windows-validation-and-small-portable`：自我檢查、合成測試報告與 SHA256。
 
-Windows-validation-and-small-portable 含微型圖、單格假資料、自檢與 SHA256 報告。GitHub 沒有您的 Intel GPU／NPU，此流程尚未在您的 repository 代跑；不能保證所有電腦 100% 相容。GPU／NPU、完整模型與長片測試只在您的 Windows 本機進行。
+## 流程
 
-腳本從固定 SHA256 來源取得 FFmpeg／字型，SDK 相依套件依固定 Windows wheel SHA256 取得。不需要 AI API Key。GitHub Actions 的額度依您的方案而定。EXE 未簽章，Windows 可能顯示信任提示。
+1. GitHub Actions 先讀取 `VERSION`，產生 Source／Builder checkpoint，並在測試前上傳。
+2. Windows Runner 使用 `build.ps1` 編譯 Go 原生 GUI，執行錯誤回復回歸測試及 EXE headless self-check。
+3. `ci/build_runtime.py` 建立獨立 Embedded Python 3.11.9 與固定版 OpenVINO／ORT DirectML SDK；只列舉裝置並跑微型合成圖，不讀取真實神經權重。
+4. 合成資料測試驗證背景像素保護、遮罩失敗時安全略過、以及啟動預檢的錯誤訊息。
+5. `ci/package.py` 依 `VERSION` 封裝 EXE 與 ZIP。大模型權重仍由使用者依需求另行安裝。
+
+## 首次使用
+
+- 先開啟 EXE，按「安裝本機輕量環境（不下載 AI 權重）」可準備卡通原圖 Puppet 所需的本機套件。
+- MuseTalk 需要另外按「安裝／修復完整 AI 模型」下載權重；預設先用 720p／12 FPS 試做。
+- SadTalker 使用獨立安裝流程。MuseTalk 主要做對嘴，並不生成任意全身姿勢；較明顯的頭部／表情動作請使用 SadTalker 或雲端 AI。
+
+## 驗證限制
+
+PR 建置驗證編譯、SDK 套件、合成遮罩與啟動預檢，不執行真實 MuseTalk／SadTalker 全模型推論、長影片或 GPU／NPU 壓力測試。完整模型、Intel GPU／NPU、四支素材回歸與長片穩定性仍須在目標 Windows 電腦實測。未測項目不得標示為已通過。
+
+EXE 未簽章，Windows 可能顯示信任提示。建置下載的權重與雲端 AI 素材處理，請依各引擎的授權與隱私條款確認。
