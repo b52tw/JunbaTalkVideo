@@ -245,8 +245,9 @@ func (a *App) handler(w http.ResponseWriter, r *http.Request) {
 		a.localHandler(w, r)
 	case r.URL.Path == "/" && r.Method == "GET":
 		b, _ := files.ReadFile("ui/index.html")
+		page := strings.ReplaceAll(string(b), "{{APP_VERSION}}", appVersion())
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(b)
+		_, _ = w.Write([]byte(page))
 	case r.URL.Path == "/default.jpg" && r.Method == "GET":
 		b, _ := files.ReadFile("assets/default.jpg")
 		w.Header().Set("Content-Type", "image/jpeg")
