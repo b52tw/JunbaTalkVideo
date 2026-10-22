@@ -4,7 +4,7 @@ No real model weights are downloaded or opened. Only a micro graph is executed.
 import hashlib,json,shutil,subprocess,sys,urllib.request,zipfile
 from pathlib import Path
 if hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf-8',errors='replace')
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'.build/portable-runtime/base'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'.build/portable-runtime/base';VERSION=(ROOT/'VERSION').read_text(encoding='utf-8').strip();SDK_BUNDLE_ID='junba-sdk-v'+VERSION.replace('.','')
 def run(args):
     result=subprocess.run([str(x) for x in args],text=True,encoding='utf-8',errors='replace',stdout=subprocess.PIPE,stderr=subprocess.STDOUT);print(result.stdout,flush=True)
     if result.returncode:raise RuntimeError('Runtime preparation failed: '+str(args[0]))
@@ -31,6 +31,6 @@ workers=BASE/'workers';workers.mkdir(exist_ok=True)
 for name in ('hardware_check.py','micro_graph.py','inference_backend.py','runtime_support.py'):shutil.copyfile(ROOT/'local'/name,workers/name)
 probe=ROOT/'.build/sdk-probe';probe.mkdir(exist_ok=True);cfg=probe/'config.json';cfg.write_text(json.dumps(dict(mode='full',device='CPU',report=str(probe/'report.json'))),encoding='utf-8')
 run([python,'-I','-u',workers/'hardware_check.py','--config',cfg]);report=json.loads((probe/'report.json').read_text(encoding='utf-8'));assert report['cpu_verified'];assert report['real_weights_loaded'] is False
-(BASE/'bundle.json').write_text(json.dumps(dict(id='junba-sdk-v081',python='3.11.9',openvino='2026.4.1',ort_directml='1.24.4',real_models_included=False,platform='windows-x64'),indent=2),encoding='utf-8');(BASE/'directml-installed.txt').write_text('ort-directml-1.24.4-v08',encoding='utf-8')
+(BASE/'bundle.json').write_text(json.dumps(dict(id=SDK_BUNDLE_ID,python='3.11.9',openvino='2026.4.1',ort_directml='1.24.4',real_models_included=False,platform='windows-x64'),indent=2),encoding='utf-8');(BASE/'directml-installed.txt').write_text('ort-directml-1.24.4-v08',encoding='utf-8')
 (ROOT/'dist').mkdir(exist_ok=True);shutil.copyfile(probe/'report.json',ROOT/'dist/Windows_runtime_smoke.json')
 print('Portable Embedded Python SDK prepared; no full model inference was performed.')
