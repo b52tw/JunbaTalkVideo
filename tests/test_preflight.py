@@ -27,7 +27,7 @@ class PreflightTests(unittest.TestCase):
         }), encoding="utf-8")
         return subprocess.run(
             [sys.executable, "-I", str(PREFLIGHT), "--config", str(cfg)],
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, encoding="utf-8", timeout=30
         )
 
     def test_missing_audio_returns_actionable_message(self):
