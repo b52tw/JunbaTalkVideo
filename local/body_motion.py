@@ -54,8 +54,8 @@ class TorsoMotion:
     def apply(self,t):
         if not self.ready:return self.base
         h,w=self.base.shape[:2];accent=float(self.drive[min(len(self.drive)-1,max(0,int(t*50)))])
-        breath=4.*np.sin(2*np.pi*t/3.6);field=self.neck*self.safe
-        k=self.scale;dy=np.clip((breath+.65*accent)*k,-5*k,5*k)*field;dx=np.clip(((self.xx-w*.5)*.0007*np.sin(2*np.pi*t/3.6)+.30*accent)*k,-3*k,3*k)*field
+        breath=1.5*np.sin(2*np.pi*t/3.6);field=self.neck*self.safe
+        k=self.scale;dy=np.clip((breath+.35*accent)*k,-2.0,2.0)*field;dx=np.clip(((self.xx-w*.5)*.00035*np.sin(2*np.pi*t/3.6)+.20*accent)*k,-1.2,1.2)*field
         if np.max(np.abs(dy)+np.abs(dx))<1e-5:return self.base
         mx=(self.xx-dx).astype(np.float32);my=(self.yy-dy).astype(np.float32);a=cv2.remap(self.alpha,mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
         prem=cv2.remap(self.base.astype(np.float32)*self.alpha[:,:,None],mx,my,cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT)
