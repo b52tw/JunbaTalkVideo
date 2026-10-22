@@ -56,7 +56,7 @@ func shiftCaptions(dir string, delta float64) error {
 func (a *App) refreshLocalScripts() error {
 	// v0.8.3b: include the Phase 1 contour modules; they were missing, so an
 	// existing install kept its first-installed copies and never got fixes.
-	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "cartoon_puppet.py", "puppet_motion.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz"} {
+	for _, name := range []string{"semantic_mouth.py", "contour_mask.py", "contour_preflight.py", "preflight.py", "cartoon_puppet.py", "puppet_motion.py", "stage_dispatch.py", "visual_polish.py", "body_motion.py", "micro_graph.py", "hardware_check.py", "detail_cache.py", "inference_backend.py", "backend_probe.py", "probe_matmul.onnx", "runner.py", "renderer.py", "quality.py", "model_cache.py", "stage_worker.py", "runtime_support.py", "face_worker.py", "face_geometry.py", "yunet.onnx", "voice_runner.py", "mel_filters.npz"} {
 		b, e := localFiles.ReadFile("local/" + name)
 		if e != nil {
 			return e
