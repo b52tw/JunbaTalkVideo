@@ -1,0 +1,27 @@
+{
+  "version": "0.9.0",
+  "validation_scope": "Source checkpoint, native Windows EXE compilation/self-check, SDK packaging, synthetic motion-safety tests and startup preflight tests",
+  "real_model_inference": "not claimed by CI",
+  "target_pc_windows_execution": "pending local verification",
+  "musetalk_full_inference": "pending target-PC verification",
+  "sadtalker_full_inference": "pending target-PC verification",
+  "intel_gpu": "provider enumeration is not full-model validation; target-PC inference pending",
+  "intel_npu": "experimental; target-PC inference pending",
+  "four_video_regression": {
+    "video_11_version": "unknown",
+    "video_11_engine": "unknown",
+    "video_13_version": "unknown",
+    "video_13_engine": "unknown",
+    "video_14_version": "unknown",
+    "video_14_engine": "unknown",
+    "video_15_version": "unknown",
+    "video_15_engine": "unknown"
+  },
+  "limitations": [
+    "Synthetic mask tests do not prove segmentation quality on every photo/cartoon.",
+    "Unreliable masks disable motion instead of warping the whole frame.",
+    "Background hidden behind the original head cannot be perfectly reconstructed.",
+    "The default 720p/12 FPS profile reduces resource use but does not guarantee every model fits every PC.",
+    "The authoritative compile/test status is the GitHub Actions run attached to the v0.9.0 pull request."
+  ]
+}
