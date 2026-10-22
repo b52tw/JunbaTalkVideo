@@ -1,9 +1,11 @@
 """Source first: create both archives BEFORE running any validation/build.
 No model inference, downloads or test invocation belongs in this script.
 """
-import argparse,hashlib,json,zipfile
+import argparse,hashlib,json,re,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
+VERSION=(ROOT/'VERSION').read_text(encoding='utf-8').strip()
+if not re.fullmatch(r'\d+\.\d+\.\d+', VERSION): raise SystemExit('Invalid VERSION: '+VERSION)
 p=argparse.ArgumentParser();p.add_argument('--out',default=str(ROOT/'dist-source'));a=p.parse_args();out=Path(a.out).resolve();out.mkdir(parents=True,exist_ok=True)
 files=[]
 for path in ROOT.rglob('*'):
@@ -13,7 +15,7 @@ for path in ROOT.rglob('*'):
     if path.suffix in ('.exe','.pyc','.gz') or out in path.parents:continue
     files.append((path,rel.as_posix()))
 rows=[]
-for name in ('JunbaTalkVideo_v0.8_Source.zip','JunbaTalkVideo_v0.8_GitHub_Builder.zip'):
+for name in (f'JunbaTalkVideo_v{VERSION}_Source.zip',f'JunbaTalkVideo_v{VERSION}_GitHub_Builder.zip'):
     archive=out/name
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6,allowZip64=False) as z:
         for path,n in files:z.write(path,n)
