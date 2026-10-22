@@ -147,11 +147,13 @@ def main():
     proc=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=log,stderr=log,creationflags=flags)
     if not photo:decoder=subprocess.Popen([cfg['ffmpeg'],'-hide_banner','-loglevel','error','-nostdin','-stream_loop','-1','-i',cfg['source'],'-an','-vf',f'fps={fps},scale={w}:{h}','-f','rawvideo','-pix_fmt','bgr24','-threads','2','pipe:1'],stdout=subprocess.PIPE,stderr=decode_log,creationflags=flags)
     torso=None
-    if photo and cfg.get('body_motion')=='speech':
+    body_motion=cfg.get('body_motion','')
+    if photo and body_motion in ('speech','breathe'):
         from body_motion import TorsoMotion,audio_drive
-        torso=TorsoMotion(base,cfg['bbox'],audio_drive(cfg['audio']),scale={'small':1.0,'medium':1.6,'large':2.3}.get(cfg.get('body_amp','small'),1.0))
-        actual['torso_motion']=['CPU / GrabCut + RMS/Pitch damping' if torso.ready else '未套用：無可靠人物遮罩']
-        emit(stage='compose' if torso.ready else 'fallback',message='肩膀：GrabCut 前景＋呼吸／語音阻尼，背景鎖定' if torso.ready else '無可靠人物遮罩，保留原姿勢；不拉伸背景')
+        drive=audio_drive(cfg['audio']) if body_motion=='speech' else None
+        torso=TorsoMotion(base,cfg['bbox'],drive,scale={'small':0.65,'medium':0.82,'large':1.0}.get(cfg.get('body_amp','small'),0.65))
+        actual['torso_motion']=['CPU / fixed-background foreground micro-motion' if torso.ready else '未套用：人物遮罩不可靠']
+        emit(stage='compose' if torso.ready else 'fallback',message=('背景鎖定微呼吸'+('／語音重音肩動' if body_motion=='speech' else '')+'；位移上限 2 px' if torso.ready else '人物遮罩不可靠，已保留原姿勢；背景不移動'))
     # v0.8.5 head / brow motion (photos). Head moves last so blink, mouth and
     # brows travel with it; brows only on the lip-puppet path.
     head_rigs=[];body_rigs=[];brow_rig=None;brow_curve=None
@@ -171,12 +173,19 @@ def main():
         targets=[(p[0],p[3],p[2]) for p in puppets if p[3]] if puppet_mode else [('A',cfg['bbox'],None)]
         for sid,fbox,mask in targets:
             curves=motion_curves(level,fps,head_amp,timeline,active=mask,speaker=sid,continuous=head_amp!='off')
-            head_rigs.append((HeadRig(base.shape,fbox),curves))
+            rig=HeadRig(base.shape,fbox,image=base,style=cfg.get('compose_style','auto'))
+            if not rig.ready:
+                emit(stage='fallback',message=f'說話者 {sid} 頭部遮罩不可靠，已略過頭部移動以保護背景')
+                continue
+            head_rigs.append((rig,curves))
             # v0.8.7: body sway removed (2-D warp bent arms/hands next to the body).
             if puppet_mode and sid=='A' and cfg.get('eye_boxes'):
                 brow_rig=BrowRig(base.shape,cfg['eye_boxes']);brow_curve=curves[3]
-        actual['head_motion']=['CPU / 2D 頭部擺動 '+head_amp+(' + 時間軸' if timeline else '')]
-        emit(stage='compose',message=f'頭部動作：{head_amp}；{len(head_rigs)} 人'+('；含眉毛' if brow_rig else '')+(f'；時間軸 {len(timeline)} 項' if timeline else ''))
+        if head_rigs:
+            actual['head_motion']=['CPU / foreground-only head motion + fixed background']
+            emit(stage='compose',message=f'背景鎖定頭部微動：{head_amp}；{len(head_rigs)} 人'+('；含眉毛' if brow_rig else '')+(f'；時間軸 {len(timeline)} 項' if timeline else ''))
+        else:
+            actual['head_motion']=['未套用：頭部前景遮罩未通過安全檢查']
     frame=base;last_result=base
     try:
         for i in range(total):
@@ -231,7 +240,7 @@ def main():
                 if result is None:
                     if active_geometry is not None:box_fallback_frames+=1
                     result=blend_mouth(motion_frame,generated,cfg['bbox'],user_mouth_box or cfg.get('mouth_box'),mouth_geometry=None,**blend_args)
-            if photo:result=photo_motion(result,cfg['bbox'],i/fps,cfg.get('eye_boxes',[]) if cfg.get('blink') or cfg.get('gaze') else [],cfg.get('gaze',False),cfg.get('micro_motion',False),cfg.get('blink',False),'' if cfg.get('body_motion')=='speech' else cfg.get('body_motion',''),cfg.get('hand_box',[]),cfg.get('blink_profile','bezier'),cfg.get('brow_motion',False),cfg.get('lid_shadow',True))
+            if photo:result=photo_motion(result,cfg['bbox'],i/fps,cfg.get('eye_boxes',[]) if cfg.get('blink') or cfg.get('gaze') else [],cfg.get('gaze',False),cfg.get('micro_motion',False),cfg.get('blink',False),'' if cfg.get('body_motion') in ('speech','breathe') else cfg.get('body_motion',''),cfg.get('hand_box',[]),cfg.get('blink_profile','bezier'),cfg.get('brow_motion',False),cfg.get('lid_shadow',True))
             for rig,(ang,nod_,shk,_b) in head_rigs:result=rig.apply(result,float(ang[i]),float(nod_[i]),float(shk[i]))
             for rig,sw in body_rigs:result=rig.apply(result,float(sw[i]),0.,0.)
             if i==0:
