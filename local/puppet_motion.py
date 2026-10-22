@@ -135,6 +135,9 @@ class HeadRig:
         scale = min(1.0, 384.0 / max(rh, rw))
         sw, sh = max(16, int(rw * scale)), max(16, int(rh * scale))
         small = cv2.resize(source, (sw, sh), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
+        # A flat/uniform crop carries no reliable foreground boundary; fail closed.
+        if float(np.std(small)) < 1.5:
+            return
         cx = int((fx + fw * .5 - x1) * scale)
         cy = int((fy + fh * .40 - y1) * scale)
         ax, ay = max(5, int(fw * .66 * scale)), max(5, int(fh * .80 * scale))
